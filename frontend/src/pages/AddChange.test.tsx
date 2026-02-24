@@ -28,6 +28,10 @@ vi.mock('@/contexts/AuthContext', () => ({
   })),
 }));
 
+vi.mock('@/contexts/LiveContext', () => ({
+  useLive: vi.fn(() => ({ connected: false, subscribe: vi.fn(() => vi.fn()) })),
+}));
+
 function renderAddChange() {
   return render(
     <MemoryRouter initialEntries={['/add']}>

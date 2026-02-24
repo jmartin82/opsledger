@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { getToken } from '@/lib/api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8081';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8081';
 
 export type SSEEventType = 'change.created' | 'change.updated' | 'change.deleted';
 

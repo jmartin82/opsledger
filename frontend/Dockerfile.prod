@@ -1,5 +1,7 @@
 # Stage 1: Build the React app
-FROM node:20-alpine AS builder
+# Pin builder to the runner's native platform so Node/npm run without QEMU emulation.
+# The output (dist/) is static files — platform-agnostic — so only the nginx stage is arm64.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
 
 WORKDIR /app
 

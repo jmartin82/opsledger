@@ -98,22 +98,33 @@ test-all:
 
 IMAGE_REGISTRY ?= ghcr.io/jmartin
 IMAGE_TAG      ?= $(shell git rev-parse --short HEAD)
+PLATFORMS      ?= linux/amd64,linux/arm64
 
-# Build production images (tagged with git SHA and :latest)
+# Build production images for native platform and load into local Docker (for testing)
 prod-build:
-	docker build -f frontend/Dockerfile.prod --build-arg VITE_API_URL= \
+	docker buildx build -f frontend/Dockerfile.prod --build-arg VITE_API_URL= \
+		--platform linux/$(shell uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') \
+		--load \
 		-t $(IMAGE_REGISTRY)/opsledger/ui:$(IMAGE_TAG) \
 		-t $(IMAGE_REGISTRY)/opsledger/ui:latest ./frontend
-	docker build -f backend/Dockerfile.prod \
+	docker buildx build -f backend/Dockerfile.prod \
+		--platform linux/$(shell uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') \
+		--load \
 		-t $(IMAGE_REGISTRY)/opsledger/backend:$(IMAGE_TAG) \
 		-t $(IMAGE_REGISTRY)/opsledger/backend:latest ./backend
 
-# Build and push production images to registry
-prod-push: prod-build
-	docker push $(IMAGE_REGISTRY)/opsledger/ui:$(IMAGE_TAG)
-	docker push $(IMAGE_REGISTRY)/opsledger/ui:latest
-	docker push $(IMAGE_REGISTRY)/opsledger/backend:$(IMAGE_TAG)
-	docker push $(IMAGE_REGISTRY)/opsledger/backend:latest
+# Build multi-platform images and push to registry (requires docker login)
+prod-push:
+	docker buildx build -f frontend/Dockerfile.prod --build-arg VITE_API_URL= \
+		--platform $(PLATFORMS) \
+		--push \
+		-t $(IMAGE_REGISTRY)/opsledger/ui:$(IMAGE_TAG) \
+		-t $(IMAGE_REGISTRY)/opsledger/ui:latest ./frontend
+	docker buildx build -f backend/Dockerfile.prod \
+		--platform $(PLATFORMS) \
+		--push \
+		-t $(IMAGE_REGISTRY)/opsledger/backend:$(IMAGE_TAG) \
+		-t $(IMAGE_REGISTRY)/opsledger/backend:latest ./backend
 
 # Start production stack (requires .env file)
 prod-up:

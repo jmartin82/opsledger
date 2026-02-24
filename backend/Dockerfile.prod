@@ -1,5 +1,7 @@
 # Stage 1: Build the Go binary
-FROM golang:1.24-alpine AS builder
+# Pin builder to the runner's native platform so go build runs without QEMU emulation.
+# BUILDPLATFORM is injected by BuildKit; TARGETARCH is used for cross-compilation.
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -8,8 +10,10 @@ RUN go mod download
 
 COPY . .
 
+ARG TARGETARCH
+
 # CGO_ENABLED=0 produces a static binary; -ldflags strips debug info to reduce size
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /ops-ledger .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o /ops-ledger .
 
 # Stage 2: Minimal runtime image
 FROM alpine:3.20

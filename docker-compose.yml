@@ -1,0 +1,59 @@
+name: opsledger
+
+services:
+  ui:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./frontend:/app
+      - ui_node_modules:/app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - VITE_API_URL=http://localhost:8081
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./backend:/app
+    environment:
+      - PORT=8081
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=tracker
+      - DB_PASSWORD=tracker_dev
+      - DB_NAME=ops_ledger
+      - JWT_SECRET=dev-secret-change-in-production
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mariadb:11
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root_dev
+      - MYSQL_DATABASE=ops_ledger
+      - MYSQL_USER=tracker
+      - MYSQL_PASSWORD=tracker_dev
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  ui_node_modules:
+  mariadb_data:

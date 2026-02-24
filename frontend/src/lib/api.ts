@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8081';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8081';
 const TOKEN_KEY = 'opsledger_token';
 
 export function getToken(): string | null {

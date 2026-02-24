@@ -27,7 +27,7 @@ function renderWithAuth(
     logout: vi.fn(),
     register: vi.fn(),
   };
-  mockUseAuth.mockReturnValue(authValue as any);
+  mockUseAuth.mockReturnValue(authValue as ReturnType<typeof useAuth>);
 
   return render(
     <MemoryRouter initialEntries={['/protected']}>

@@ -18,12 +18,12 @@ function setRole(role: 'admin' | 'editor' | 'viewer') {
       if (action === 'edit_changes') return role === 'admin' || role === 'editor';
       return true;
     },
-  } as any);
+  } as ReturnType<typeof useAuth>);
 }
 
 function renderChangeItem(
   changeOverrides?: Partial<import('@/types/change').Change>,
-  handlers?: { onEdit?: (c: any) => void; onDelete?: (c: any) => void },
+  handlers?: { onEdit?: (c: import('@/types/change').Change) => void; onDelete?: (c: import('@/types/change').Change) => void },
 ) {
   const change = mockChange(changeOverrides);
   return render(

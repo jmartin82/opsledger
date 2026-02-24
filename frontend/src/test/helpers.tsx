@@ -38,9 +38,11 @@ export function mockChange(overrides?: Partial<import('@/types/change').Change>)
 
 const ROLE_LEVEL: Record<UserRole, number> = { viewer: 1, editor: 2, admin: 3 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const AuthContext = React.createContext<any>(null);
 
 // We dynamically import to get the actual context reference
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _realAuthContext: React.Context<any> | null = null;
 
 async function getRealAuthContext() {
@@ -48,7 +50,8 @@ async function getRealAuthContext() {
     const mod = await import('@/contexts/AuthContext');
     // The context is not exported, but useAuth reads from it.
     // We'll use a provider wrapper approach instead.
-    _realAuthContext = (mod as any).__AuthContext;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    _realAuthContext = (mod as Record<string, unknown>).__AuthContext as React.Context<any>;
   }
   return _realAuthContext;
 }
@@ -120,7 +123,7 @@ export function createAuthValue(user: AuthUser | null) {
 interface WrapperOptions {
   user?: AuthUser | null;
   initialRoute?: string;
-  authOverrides?: Record<string, any>;
+  authOverrides?: Record<string, unknown>;
 }
 
 /**
@@ -139,7 +142,8 @@ export function renderWithProviders(
 
   // We need to provide this through the real context. We'll use the mock approach.
   // Set the mock return value before rendering.
-  const { useAuth } = require('@/contexts/AuthContext');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useAuth } = require('@/contexts/AuthContext') as { useAuth: { _isMockFunction?: boolean; mockReturnValue: (v: unknown) => void } };
   if (typeof useAuth === 'function' && useAuth._isMockFunction) {
     useAuth.mockReturnValue(authValue);
   }

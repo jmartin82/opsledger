@@ -107,7 +107,7 @@ describe('AddChange', () => {
   });
 
   it('submit sends correct payload', async () => {
-    let capturedBody: any = null;
+    let capturedBody: unknown = null;
     server.use(
       http.post(`${API_URL}/api/changes`, async ({ request }) => {
         capturedBody = await request.json();

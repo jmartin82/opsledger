@@ -209,5 +209,5 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-MIT License - see the LICENSE file for details.
+[GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE) — see the LICENSE file for details.
 # opsledger

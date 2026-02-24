@@ -54,7 +54,7 @@ describe('EditChangeDialog', () => {
   });
 
   it('successful edit calls PUT with correct payload', async () => {
-    let capturedBody: any = null;
+    let capturedBody: unknown = null;
     server.use(
       http.put(`${API_URL}/api/changes/1`, async ({ request }) => {
         capturedBody = await request.json();

@@ -61,7 +61,9 @@ describe('api', () => {
 
     // Mock window.location.href
     const originalHref = window.location.href;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (window as any).location;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).location = { href: originalHref };
 
     await expect(api.get('/api/test')).rejects.toThrow('Unauthorized');
@@ -69,6 +71,7 @@ describe('api', () => {
     expect(window.location.href).toBe('/login');
 
     // Restore
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).location = new URL(originalHref);
   });
 

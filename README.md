@@ -20,14 +20,6 @@ OpsLedger provides a single source of truth for all changes made to your infrast
 
 ## Features
 
-### Real-time Updates
-The change log updates live across all open browser sessions without any page refresh — powered by **Server-Sent Events (SSE)**:
-- **Instant propagation** — when any user registers, edits, or deletes a change, every connected client sees the update immediately
-- **Connection status indicator** — a green pulsing dot in the nav bar shows the live connection; turns amber with "Reconnecting" if the stream drops
-- **Exponential backoff reconnection** — the client automatically reconnects with 1s → 2s → 4s … capped at 30s backoff
-- **Smart fallback** — when the SSE stream is offline, the UI falls back to a manual refetch after mutations so data stays consistent
-- **JWT-authenticated stream** — the `/api/events` endpoint validates the session token; API keys are intentionally not accepted on the SSE endpoint to avoid long-lived credentials appearing in server logs
-
 ### Change Management
 - **Register Changes** - Log infrastructure, deployment, and configuration changes with rich metadata including system, environment, change type, and detailed descriptions
 - **Real-time Filtering** - Filter changes by system, environment, user, change type, and time range
@@ -51,23 +43,9 @@ The change log updates live across all open browser sessions without any page re
 - API key lifecycle management
 - Audit log for security tracking
 
-## Tech Stack
+### Real-time Updates
+The change log updates live across all open browser sessions without any page refresh — powered by **Server-Sent Events (SSE)**
 
-### Frontend
-- **React 18** with TypeScript
-- **Vite** - Build tool and dev server
-- **Tailwind CSS** - Styling
-- **shadcn/ui** - Component library (Radix UI primitives)
-- **React Router DOM** - Client-side routing
-- **TanStack Query** - Server state management
-- **React Hook Form + Zod** - Form handling and validation
-- **Recharts** - Data visualization
-
-### Backend
-- **Go** with the Echo framework
-- **MySQL** database
-- **JWT** for session authentication
-- **SHA-256** for API key hashing
 
 ## Use Cases
 
@@ -204,6 +182,25 @@ The API supports two authentication methods:
    ```
    X-API-Key: <your_api_key>
    ```
+
+## Tech Stack
+
+### Frontend
+- **React 18** with TypeScript
+- **Vite** - Build tool and dev server
+- **Tailwind CSS** - Styling
+- **shadcn/ui** - Component library (Radix UI primitives)
+- **React Router DOM** - Client-side routing
+- **TanStack Query** - Server state management
+- **React Hook Form + Zod** - Form handling and validation
+- **Recharts** - Data visualization
+
+### Backend
+- **Go** with the Echo framework
+- **MySQL** database
+- **JWT** for session authentication
+- **SHA-256** for API key hashing
+
 
 ## Project Structure
 

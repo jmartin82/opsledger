@@ -2,11 +2,31 @@
 
 A centralized change logging system for tracking infrastructure, deployment, and configuration changes across your organization's systems.
 
+![Change Log](docs/screenshots/change-log-hero.png)
+
 ## Overview
 
 OpsLedger provides a single source of truth for all changes made to your infrastructure. Whether you're deploying new services, updating configurations, or modifying network settings, this platform helps teams maintain visibility and accountability over their entire change history.
 
+## Screenshots
+
+| Change Log | Filter by Environment |
+|---|---|
+| ![Change Log](docs/screenshots/change-log-hero.png) | ![Filtering](docs/screenshots/filtering.png) |
+
+| Register Change | API Key Management |
+|---|---|
+| ![Register Change](docs/screenshots/register-change.png) | ![API Keys](docs/screenshots/api-keys.png) |
+
 ## Features
+
+### Real-time Updates
+The change log updates live across all open browser sessions without any page refresh — powered by **Server-Sent Events (SSE)**:
+- **Instant propagation** — when any user registers, edits, or deletes a change, every connected client sees the update immediately
+- **Connection status indicator** — a green pulsing dot in the nav bar shows the live connection; turns amber with "Reconnecting" if the stream drops
+- **Exponential backoff reconnection** — the client automatically reconnects with 1s → 2s → 4s … capped at 30s backoff
+- **Smart fallback** — when the SSE stream is offline, the UI falls back to a manual refetch after mutations so data stays consistent
+- **JWT-authenticated stream** — the `/api/events` endpoint validates the session token; API keys are intentionally not accepted on the SSE endpoint to avoid long-lived credentials appearing in server logs
 
 ### Change Management
 - **Register Changes** - Log infrastructure, deployment, and configuration changes with rich metadata including system, environment, change type, and detailed descriptions
@@ -78,11 +98,10 @@ This provides visibility into how much of your change history is driven by autom
 
 ### Prerequisites
 
-- Node.js 18+ and npm
-- Go 1.21+
-- MySQL 8.0+ (or use Docker)
+- Docker & Docker Compose (recommended)
+- Or: Node.js 18+, Go 1.21+, MariaDB/MySQL 8+
 
-### Quick Start
+### Quick Start with Docker (recommended)
 
 1. **Clone the repository**
    ```bash
@@ -90,44 +109,52 @@ This provides visibility into how much of your change history is driven by autom
    cd ops-ledger
    ```
 
-2. **Start the database**
+2. **Start all services**
    ```bash
-   docker-compose up -d
+   make up
    ```
+   - UI: `http://localhost:8080`
+   - Backend API: `http://localhost:8081`
+   - MariaDB: `localhost:3306`
 
-3. **Start the backend**
+3. **Register your first user**
+   Visit `http://localhost:8080` — the first registered user is automatically granted the `admin` role.
+
+### Local Development (without Docker)
+
+1. **Start the backend**
    ```bash
    cd backend
-   go run main.go
+   go run .
    ```
-   The API server will start on `http://localhost:8080`
+   The API server starts on `http://localhost:8081`.
 
-4. **Start the frontend**
+2. **Start the frontend**
    ```bash
+   cd frontend
    npm install
    npm run dev
    ```
-   The frontend will be available at `http://localhost:5173`
-
-5. **Create an admin user**
-   Visit the registration page to create your first user, then manually update their role to `admin` in the database.
+   The frontend dev server starts on `http://localhost:5173`.
 
 ### Environment Variables
 
-**Frontend** (create `.env` in root):
-```env
-VITE_API_URL=http://localhost:8080/api
-```
+Copy `.env.example` to `.env` in the project root to override defaults.
 
-**Backend** (create `.env` in backend directory):
+**Backend** (defaults in `backend/config/config.go`, no `.env` required for local dev):
 ```env
+PORT=8081
 DB_HOST=localhost
 DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_password
+DB_USER=tracker
+DB_PASSWORD=tracker_dev
 DB_NAME=ops_ledger
 JWT_SECRET=your_jwt_secret
-PORT=8080
+```
+
+**Frontend** (create `frontend/.env`):
+```env
+VITE_API_URL=http://localhost:8081/api
 ```
 
 ## API Documentation
@@ -182,19 +209,26 @@ The API supports two authentication methods:
 
 ```
 ops-ledger/
-├── src/
-│   ├── components/       # Reusable UI components
-│   ├── pages/           # Page components
-│   ├── lib/             # Utilities and API client
-│   ├── hooks/           # Custom React hooks
-│   └── types/           # TypeScript type definitions
+├── frontend/
+│   ├── src/
+│   │   ├── components/   # Reusable UI components (shadcn/ui in components/ui/)
+│   │   ├── pages/        # Page components
+│   │   ├── lib/          # API client and utilities
+│   │   ├── hooks/        # Custom React hooks
+│   │   ├── contexts/     # Auth and app context providers
+│   │   └── types/        # TypeScript type definitions
+│   ├── Dockerfile        # Dev container image
+│   └── Dockerfile.prod   # Production multi-stage image
 ├── backend/
-│   ├── main.go          # Application entry point
-│   ├── models/          # Database models
-│   ├── handlers/       # HTTP handlers
-│   ├── middleware/      # Authentication middleware
-│   └── database/        # Database migrations
-└── docker-compose.yml   # MySQL database setup
+│   ├── main.go           # Application entry point
+│   ├── config/           # Environment config with dev defaults
+│   ├── models/           # Database models + SQL query functions
+│   ├── handlers/         # HTTP request handlers
+│   ├── middleware/        # JWT and API key auth middleware
+│   └── database/         # Schema migrations (CREATE TABLE IF NOT EXISTS)
+├── docker-compose.yml    # Dev stack (UI :8080, API :8081, DB :3306)
+├── docker-compose.prod.yml
+└── Makefile              # Common dev commands
 ```
 
 ## Contributing
@@ -210,4 +244,3 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE) — see the LICENSE file for details.
-# opsledger

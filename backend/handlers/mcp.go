@@ -52,6 +52,17 @@ type ToolCallParams struct {
 	Arguments map[string]any `json:"arguments,omitempty"`
 }
 
+// MCP tools/call response types (spec version 2024-11-05)
+type ContentBlock struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type ToolCallResult struct {
+	Content []ContentBlock `json:"content"`
+	IsError bool           `json:"isError,omitempty"`
+}
+
 // Handle processes MCP JSON-RPC requests
 func (h *MCPHandler) Handle(c echo.Context) error {
 	var req JSONRPCRequest
@@ -173,18 +184,38 @@ func (h *MCPHandler) handleToolCall(ctx context.Context, params json.RawMessage)
 		return nil, &RPCError{Code: -32602, Message: "Invalid params"}
 	}
 
+	var data interface{}
+	var rpcErr *RPCError
+
 	switch callParams.Name {
 	case "register_change":
-		return h.createChange(ctx, callParams.Arguments)
+		data, rpcErr = h.createChange(ctx, callParams.Arguments)
 	case "update_change":
-		return h.updateChange(ctx, callParams.Arguments)
+		data, rpcErr = h.updateChange(ctx, callParams.Arguments)
 	case "delete_change":
-		return h.deleteChange(ctx, callParams.Arguments)
+		data, rpcErr = h.deleteChange(ctx, callParams.Arguments)
 	case "list_changes":
-		return h.listChanges(ctx, callParams.Arguments)
+		data, rpcErr = h.listChanges(ctx, callParams.Arguments)
 	default:
 		return nil, &RPCError{Code: -32601, Message: "Tool not found"}
 	}
+
+	if rpcErr != nil {
+		// Tool execution error — route into result so the LLM can see and self-correct (MCP spec)
+		return ToolCallResult{
+			Content: []ContentBlock{{Type: "text", Text: rpcErr.Message}},
+			IsError: true,
+		}, nil
+	}
+
+	text, err := json.Marshal(data)
+	if err != nil {
+		return nil, &RPCError{Code: -32000, Message: "Failed to serialize result"}
+	}
+
+	return ToolCallResult{
+		Content: []ContentBlock{{Type: "text", Text: string(text)}},
+	}, nil
 }
 
 func (h *MCPHandler) createChange(ctx context.Context, args map[string]any) (interface{}, *RPCError) {

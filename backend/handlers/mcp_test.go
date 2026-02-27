@@ -40,6 +40,49 @@ func decodeMCPResp(t *testing.T, body []byte) mcpResp {
 	return resp
 }
 
+// unwrapToolResult extracts the JSON payload from content[0].text of a ToolCallResult.
+func unwrapToolResult(t *testing.T, raw json.RawMessage) json.RawMessage {
+	t.Helper()
+	var result struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		t.Fatalf("decode ToolCallResult: %v", err)
+	}
+	if len(result.Content) == 0 {
+		t.Fatal("expected content[0], got empty content")
+	}
+	return json.RawMessage(result.Content[0].Text)
+}
+
+// assertToolError verifies that resp.Result is a ToolCallResult with isError:true.
+// wantMsgContains is checked against content[0].text (pass "" to skip message check).
+func assertToolError(t *testing.T, raw json.RawMessage, wantMsgContains string) {
+	t.Helper()
+	var result struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+		IsError bool `json:"isError"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		t.Fatalf("decode ToolCallResult: %v", err)
+	}
+	if !result.IsError {
+		t.Errorf("expected isError:true, got false")
+	}
+	if len(result.Content) == 0 {
+		t.Fatal("expected content[0], got empty content")
+	}
+	if wantMsgContains != "" && !strings.Contains(result.Content[0].Text, wantMsgContains) {
+		t.Errorf("expected message to contain %q, got: %s", wantMsgContains, result.Content[0].Text)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Protocol Tests (no DB needed)
 // ---------------------------------------------------------------------------
@@ -206,7 +249,7 @@ func TestMCPCreateChange_Success(t *testing.T) {
 	}
 
 	var change map[string]interface{}
-	if err := json.Unmarshal(resp.Result, &change); err != nil {
+	if err := json.Unmarshal(unwrapToolResult(t, resp.Result), &change); err != nil {
 		t.Fatalf("decode result: %v", err)
 	}
 	if change["system"] != "api-service" {
@@ -248,12 +291,10 @@ func TestMCPCreateChange_MissingRequired(t *testing.T) {
 			}
 
 			resp := decodeMCPResp(t, rec.Body.Bytes())
-			if resp.Error == nil {
-				t.Fatal("expected error, got nil")
+			if resp.Error != nil {
+				t.Fatalf("expected no RPC error, got: %+v", resp.Error)
 			}
-			if resp.Error.Code != -32602 {
-				t.Errorf("expected -32602, got %d", resp.Error.Code)
-			}
+			assertToolError(t, resp.Result, "")
 		})
 	}
 }
@@ -275,15 +316,10 @@ func TestMCPCreateChange_InvalidType(t *testing.T) {
 	}
 
 	resp := decodeMCPResp(t, rec.Body.Bytes())
-	if resp.Error == nil {
-		t.Fatal("expected error for invalid type")
+	if resp.Error != nil {
+		t.Fatalf("expected no RPC error, got: %+v", resp.Error)
 	}
-	if resp.Error.Code != -32602 {
-		t.Errorf("expected -32602, got %d", resp.Error.Code)
-	}
-	if !strings.Contains(resp.Error.Message, "infrastructure") {
-		t.Errorf("expected message to mention 'infrastructure', got: %s", resp.Error.Message)
-	}
+	assertToolError(t, resp.Result, "infrastructure")
 }
 
 func TestMCPCreateChange_WithTimestamp(t *testing.T) {
@@ -345,12 +381,10 @@ func TestMCPCreateChange_InvalidTimestamp(t *testing.T) {
 	}
 
 	resp := decodeMCPResp(t, rec.Body.Bytes())
-	if resp.Error == nil {
-		t.Fatal("expected error for invalid timestamp")
+	if resp.Error != nil {
+		t.Fatalf("expected no RPC error, got: %+v", resp.Error)
 	}
-	if !strings.Contains(resp.Error.Message, "RFC3339") {
-		t.Errorf("expected RFC3339 mention, got: %s", resp.Error.Message)
-	}
+	assertToolError(t, resp.Result, "RFC3339")
 }
 
 // ---------------------------------------------------------------------------
@@ -395,7 +429,7 @@ func TestMCPUpdateChange_Success(t *testing.T) {
 	}
 
 	var change map[string]interface{}
-	if err := json.Unmarshal(resp.Result, &change); err != nil {
+	if err := json.Unmarshal(unwrapToolResult(t, resp.Result), &change); err != nil {
 		t.Fatalf("decode result: %v", err)
 	}
 	if change["system"] != "api-service" {
@@ -424,15 +458,10 @@ func TestMCPUpdateChange_MissingID(t *testing.T) {
 	}
 
 	resp := decodeMCPResp(t, rec.Body.Bytes())
-	if resp.Error == nil {
-		t.Fatal("expected error for missing id")
+	if resp.Error != nil {
+		t.Fatalf("expected no RPC error, got: %+v", resp.Error)
 	}
-	if resp.Error.Code != -32602 {
-		t.Errorf("expected -32602, got %d", resp.Error.Code)
-	}
-	if resp.Error.Message != "id is required" {
-		t.Errorf("expected 'id is required', got: %s", resp.Error.Message)
-	}
+	assertToolError(t, resp.Result, "id is required")
 }
 
 func TestMCPUpdateChange_NotFound(t *testing.T) {
@@ -455,15 +484,10 @@ func TestMCPUpdateChange_NotFound(t *testing.T) {
 	}
 
 	resp := decodeMCPResp(t, rec.Body.Bytes())
-	if resp.Error == nil {
-		t.Fatal("expected error for not found")
+	if resp.Error != nil {
+		t.Fatalf("expected no RPC error, got: %+v", resp.Error)
 	}
-	if resp.Error.Code != -32602 {
-		t.Errorf("expected -32602, got %d", resp.Error.Code)
-	}
-	if resp.Error.Message != "Change not found" {
-		t.Errorf("expected 'Change not found', got: %s", resp.Error.Message)
-	}
+	assertToolError(t, resp.Result, "Change not found")
 
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unmet expectations: %v", err)
@@ -512,7 +536,7 @@ func TestMCPDeleteChange_Success(t *testing.T) {
 	}
 
 	var result map[string]string
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := json.Unmarshal(unwrapToolResult(t, resp.Result), &result); err != nil {
 		t.Fatalf("decode result: %v", err)
 	}
 	if result["message"] != "Change deleted" {
@@ -541,12 +565,10 @@ func TestMCPDeleteChange_MissingID(t *testing.T) {
 	}
 
 	resp := decodeMCPResp(t, rec.Body.Bytes())
-	if resp.Error == nil {
-		t.Fatal("expected error for missing id")
+	if resp.Error != nil {
+		t.Fatalf("expected no RPC error, got: %+v", resp.Error)
 	}
-	if resp.Error.Code != -32602 {
-		t.Errorf("expected -32602, got %d", resp.Error.Code)
-	}
+	assertToolError(t, resp.Result, "")
 }
 
 func TestMCPDeleteChange_NotFound(t *testing.T) {
@@ -573,15 +595,10 @@ func TestMCPDeleteChange_NotFound(t *testing.T) {
 	}
 
 	resp := decodeMCPResp(t, rec.Body.Bytes())
-	if resp.Error == nil {
-		t.Fatal("expected error for not found")
+	if resp.Error != nil {
+		t.Fatalf("expected no RPC error, got: %+v", resp.Error)
 	}
-	if resp.Error.Code != -32602 {
-		t.Errorf("expected -32602, got %d", resp.Error.Code)
-	}
-	if resp.Error.Message != "Change not found" {
-		t.Errorf("expected 'Change not found', got: %s", resp.Error.Message)
-	}
+	assertToolError(t, resp.Result, "Change not found")
 
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unmet expectations: %v", err)
@@ -625,7 +642,7 @@ func TestMCPListChanges_NoFilters(t *testing.T) {
 	}
 
 	var result map[string]interface{}
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := json.Unmarshal(unwrapToolResult(t, resp.Result), &result); err != nil {
 		t.Fatalf("decode result: %v", err)
 	}
 
@@ -674,7 +691,7 @@ func TestMCPListChanges_WithFilters(t *testing.T) {
 	}
 
 	var result map[string]interface{}
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := json.Unmarshal(unwrapToolResult(t, resp.Result), &result); err != nil {
 		t.Fatalf("decode result: %v", err)
 	}
 
@@ -718,7 +735,7 @@ func TestMCPListChanges_LimitEnforcement(t *testing.T) {
 	}
 
 	var result map[string]interface{}
-	json.Unmarshal(resp.Result, &result)
+	json.Unmarshal(unwrapToolResult(t, resp.Result), &result)
 
 	limit, _ := result["limit"].(float64)
 	if int(limit) != 200 {
@@ -760,7 +777,7 @@ func TestMCPListChanges_DefaultLimit(t *testing.T) {
 	}
 
 	var result map[string]interface{}
-	json.Unmarshal(resp.Result, &result)
+	json.Unmarshal(unwrapToolResult(t, resp.Result), &result)
 
 	limit, _ := result["limit"].(float64)
 	if int(limit) != 50 {

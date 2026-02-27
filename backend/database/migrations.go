@@ -43,7 +43,7 @@ func Migrate(db *sql.DB) error {
 
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS changes (
-			id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+			id          CHAR(36) NOT NULL PRIMARY KEY,
 			system      VARCHAR(255) NOT NULL,
 			environment VARCHAR(100) NULL,
 			user        VARCHAR(255) NULL,
@@ -67,6 +67,7 @@ func Migrate(db *sql.DB) error {
 			action      VARCHAR(100) NOT NULL,
 			target_type VARCHAR(50)  NOT NULL,
 			target_id   BIGINT UNSIGNED NULL,
+			target_uuid CHAR(36) NULL,
 			details     TEXT NULL,
 			ip_address  VARCHAR(45) NULL,
 			created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -137,16 +137,52 @@ func authInjectClaims(t *testing.T, c echo.Context, token string) {
 	c.Set("claims", claims)
 }
 
+// setupEmptyAuthDB connects to the DB and ensures the users table is empty.
+// Used for tests that exercise the first-user registration path.
+func setupEmptyAuthDB(t *testing.T) *sql.DB {
+	t.Helper()
+
+	cfg := config.Config{
+		DBHost: getEnvDefault("DB_HOST", "localhost"),
+		DBPort: getEnvDefault("DB_PORT", "3306"),
+		DBUser: getEnvDefault("DB_USER", "tracker"),
+		DBPass: getEnvDefault("DB_PASSWORD", "tracker_dev"),
+		DBName: getEnvDefault("DB_NAME", "ops_ledger"),
+	}
+	db, err := database.Connect(cfg)
+	if err != nil {
+		t.Fatalf("failed to connect to database: %v", err)
+	}
+	if err := database.Migrate(db); err != nil {
+		t.Fatalf("failed to run migrations: %v", err)
+	}
+
+	// Clear foreign-key dependent tables first, then users.
+	_, _ = db.Exec("DELETE FROM api_keys")
+	_, _ = db.Exec("DELETE FROM changes")
+	_, _ = db.Exec("DELETE FROM audit_log")
+	_, _ = db.Exec("DELETE FROM users")
+
+	t.Cleanup(func() {
+		_, _ = db.Exec("DELETE FROM api_keys")
+		_, _ = db.Exec("DELETE FROM changes")
+		_, _ = db.Exec("DELETE FROM audit_log")
+		_, _ = db.Exec("DELETE FROM users")
+		db.Close()
+	})
+
+	return db
+}
+
 // ---------------------------------------------------------------------------
 // Register Integration Tests
 // ---------------------------------------------------------------------------
 
 func TestRegisterIntegration(t *testing.T) {
-	env := setupAuthTestEnv(t)
+	db := setupEmptyAuthDB(t)
 	e := echo.New()
-	h := &handlers.AuthHandler{DB: env.db, JWTSecret: authTestJWTSecret}
+	h := &handlers.AuthHandler{DB: db, JWTSecret: authTestJWTSecret}
 
-	// Success case
 	body := `{"email":"newuser@example.com","password":"newpassword123","name":"New User"}`
 	c, rec := authNewContext(e, http.MethodPost, "/api/auth/register", body, "")
 
@@ -167,30 +203,45 @@ func TestRegisterIntegration(t *testing.T) {
 	if resp.Token == "" || resp.User == nil {
 		t.Fatal("expected token and user in response")
 	}
-	if resp.User.Role != "viewer" {
-		t.Errorf("expected viewer role, got %s", resp.User.Role)
+	// First registered user becomes admin.
+	if resp.User.Role != "admin" {
+		t.Errorf("expected admin role for first user, got %s", resp.User.Role)
 	}
-
-	// Cleanup
-	_, _ = env.db.Exec("DELETE FROM users WHERE id = ?", resp.User.ID)
 }
 
 func TestRegisterIntegration_DuplicateEmail(t *testing.T) {
-	env := setupAuthTestEnv(t)
+	db := setupEmptyAuthDB(t)
 	e := echo.New()
-	h := &handlers.AuthHandler{DB: env.db, JWTSecret: authTestJWTSecret}
+	h := &handlers.AuthHandler{DB: db, JWTSecret: authTestJWTSecret}
 
-	// Try to register with existing user's email
-	body := `{"email":"user-test-%s@example.com","password":"password123","name":"Duplicate"}`
-	// We need the actual email from setup, so use the user's email
-	body = fmt.Sprintf(body, strconv.FormatInt(int64(env.userID), 10))
-	c, rec := authNewContext(e, http.MethodPost, "/api/auth/register", body, "")
-
-	if err := h.Register(c); err != nil {
-		t.Fatalf("Register error: %v", err)
+	// Register the first user (allowed).
+	body1 := `{"email":"first@example.com","password":"password123","name":"First"}`
+	c1, rec1 := authNewContext(e, http.MethodPost, "/api/auth/register", body1, "")
+	if err := h.Register(c1); err != nil {
+		t.Fatalf("first Register error: %v", err)
 	}
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
+	if rec1.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for first register, got %d: %s", rec1.Code, rec1.Body.String())
+	}
+
+	// Insert a second user directly so the table is non-empty but we can still
+	// attempt a duplicate via the admin user-creation path. Since the /register
+	// endpoint blocks when users exist, we test the uniqueness constraint via
+	// a direct INSERT instead.
+	_, err := db.Exec(
+		"INSERT INTO users (email, name, password_hash, role, status) VALUES (?, ?, ?, 'viewer', 'active')",
+		"dup@example.com", "Dup User", "hash",
+	)
+	if err != nil {
+		t.Fatalf("setup insert: %v", err)
+	}
+	// Attempt duplicate insert — should fail with unique constraint.
+	_, err = db.Exec(
+		"INSERT INTO users (email, name, password_hash, role, status) VALUES (?, ?, ?, 'viewer', 'active')",
+		"dup@example.com", "Dup User 2", "hash2",
+	)
+	if err == nil {
+		t.Fatal("expected unique constraint violation, got nil error")
 	}
 }
 

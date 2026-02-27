@@ -29,8 +29,5 @@ frontend/dist-ssr
 
 # Production environment file (contains secrets)
 .env
-backend/backend
-backend/deployment-tracker
-backend/tmp/main
 node_modules/
-x_git/
+.mcp.json

@@ -73,7 +73,7 @@ func setupChangesTestEnv(t *testing.T) *changesTestEnv {
 	userHash, _ := bcrypt.GenerateFromPassword([]byte("user-pass"), bcrypt.MinCost)
 	userEmail := fmt.Sprintf("changes-user-%d@example.com", time.Now().UnixNano())
 	resUser, _ := db.Exec(
-		"INSERT INTO users (email, name, password_hash, role, status) VALUES (?, ?, ?, 'user', 'active')",
+		"INSERT INTO users (email, name, password_hash, role, status) VALUES (?, ?, ?, 'editor', 'active')",
 		userEmail, "Changes User", string(userHash),
 	)
 	userID, _ := resUser.LastInsertId()
@@ -88,7 +88,7 @@ func setupChangesTestEnv(t *testing.T) *changesTestEnv {
 	viewerID, _ := resViewer.LastInsertId()
 
 	// Generate JWTs
-	userJWT := generateChangesTestJWT(t, uint64(userID), userEmail, "user")
+	userJWT := generateChangesTestJWT(t, uint64(userID), userEmail, "editor")
 	adminJWT := generateChangesTestJWT(t, uint64(adminID), adminEmail, "admin")
 	viewerJWT := generateChangesTestJWT(t, uint64(viewerID), viewerEmail, "viewer")
 

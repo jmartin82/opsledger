@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Change struct {
-	ID          uint64    `json:"id,string"`
+	ID          string    `json:"id"`
 	System      string    `json:"system"`
 	Environment *string   `json:"environment"`
 	User        *string   `json:"user"`
@@ -30,27 +32,26 @@ type ChangeFilters struct {
 }
 
 func CreateChange(db *sql.DB, system string, environment, user *string, changeType, description string, timestamp *time.Time) (*Change, error) {
-	var res sql.Result
+	newID := uuid.New().String()
 	var err error
 	if timestamp != nil {
-		res, err = db.Exec(
-			"INSERT INTO changes (system, environment, user, type, description, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-			system, environment, user, changeType, description, *timestamp,
+		_, err = db.Exec(
+			"INSERT INTO changes (id, system, environment, user, type, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			newID, system, environment, user, changeType, description, *timestamp,
 		)
 	} else {
-		res, err = db.Exec(
-			"INSERT INTO changes (system, environment, user, type, description) VALUES (?, ?, ?, ?, ?)",
-			system, environment, user, changeType, description,
+		_, err = db.Exec(
+			"INSERT INTO changes (id, system, environment, user, type, description) VALUES (?, ?, ?, ?, ?, ?)",
+			newID, system, environment, user, changeType, description,
 		)
 	}
 	if err != nil {
 		return nil, err
 	}
-	id, _ := res.LastInsertId()
-	return GetChangeByID(db, uint64(id))
+	return GetChangeByID(db, newID)
 }
 
-func GetChangeByID(db *sql.DB, id uint64) (*Change, error) {
+func GetChangeByID(db *sql.DB, id string) (*Change, error) {
 	c := &Change{}
 	err := db.QueryRow(
 		"SELECT id, system, environment, user, type, description, created_at FROM changes WHERE id = ?",
@@ -62,7 +63,7 @@ func GetChangeByID(db *sql.DB, id uint64) (*Change, error) {
 	return c, nil
 }
 
-func UpdateChange(db *sql.DB, id uint64, system string, environment, user *string, changeType, description string, timestamp *time.Time) (*Change, error) {
+func UpdateChange(db *sql.DB, id string, system string, environment, user *string, changeType, description string, timestamp *time.Time) (*Change, error) {
 	var res sql.Result
 	var err error
 	if timestamp != nil {
@@ -89,7 +90,7 @@ func UpdateChange(db *sql.DB, id uint64, system string, environment, user *strin
 	return GetChangeByID(db, id)
 }
 
-func DeleteChange(db *sql.DB, id uint64) error {
+func DeleteChange(db *sql.DB, id string) error {
 	res, err := db.Exec("DELETE FROM changes WHERE id=?", id)
 	if err != nil {
 		return err

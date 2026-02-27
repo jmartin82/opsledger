@@ -79,7 +79,7 @@ func (h *ApiKeyHandler) Create(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create API key"})
 	}
 
-	auditLog(h.DB, c, "apikey.create", "api_key", uint64Ptr(apiKey.ID), strPtr(req.Name))
+	auditLog(h.DB, c, "apikey.create", "api_key", uint64Ptr(apiKey.ID), nil, strPtr(req.Name))
 	return c.JSON(http.StatusCreated, createApiKeyResponse{Key: rawKey, ApiKey: apiKey})
 }
 
@@ -118,7 +118,7 @@ func (h *ApiKeyHandler) Revoke(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to revoke API key"})
 	}
 
-	auditLog(h.DB, c, "apikey.revoke", "api_key", uint64Ptr(id), nil)
+	auditLog(h.DB, c, "apikey.revoke", "api_key", uint64Ptr(id), nil, nil)
 	return c.JSON(http.StatusOK, map[string]string{"message": "API key revoked"})
 }
 
@@ -159,6 +159,6 @@ func (h *ApiKeyHandler) Rotate(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create new API key"})
 	}
 
-	auditLog(h.DB, c, "apikey.rotate", "api_key", uint64Ptr(apiKey.ID), strPtr(existing.Name))
+	auditLog(h.DB, c, "apikey.rotate", "api_key", uint64Ptr(apiKey.ID), nil, strPtr(existing.Name))
 	return c.JSON(http.StatusCreated, createApiKeyResponse{Key: rawKey, ApiKey: apiKey})
 }

@@ -29,10 +29,10 @@ type AuditFilters struct {
 	Offset     int
 }
 
-func CreateAuditEntry(db *sql.DB, actor string, actorID *uint64, action, targetType string, targetID *uint64, details, ipAddress *string) error {
+func CreateAuditEntry(db *sql.DB, actor string, actorID *uint64, action, targetType string, targetID *uint64, targetUUID *string, details, ipAddress *string) error {
 	_, err := db.Exec(
-		"INSERT INTO audit_log (actor, actor_id, action, target_type, target_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		actor, actorID, action, targetType, targetID, details, ipAddress,
+		"INSERT INTO audit_log (actor, actor_id, action, target_type, target_id, target_uuid, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		actor, actorID, action, targetType, targetID, targetUUID, details, ipAddress,
 	)
 	return err
 }

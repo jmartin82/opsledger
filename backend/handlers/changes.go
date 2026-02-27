@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"database/sql"
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 
 	mw "ops-ledger/backend/middleware"
@@ -77,7 +77,7 @@ func (h *ChangeHandler) Create(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create change"})
 	}
 
-	auditLog(h.DB, c, "change.create", "change", uint64Ptr(change.ID), strPtr(req.System+": "+req.Description))
+	auditLog(h.DB, c, "change.create", "change", nil, strPtr(change.ID), strPtr(req.System+": "+req.Description))
 	if h.Hub != nil {
 		h.Hub.Publish(SSEEvent{Type: "change.created", Data: change})
 	}
@@ -89,8 +89,8 @@ func (h *ChangeHandler) Update(c echo.Context) error {
 		return err
 	}
 
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
+	id := c.Param("id")
+	if _, err := uuid.Parse(id); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid change ID"})
 	}
 
@@ -134,7 +134,7 @@ func (h *ChangeHandler) Update(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update change"})
 	}
 
-	auditLog(h.DB, c, "change.update", "change", uint64Ptr(change.ID), strPtr(req.System+": "+req.Description))
+	auditLog(h.DB, c, "change.update", "change", nil, strPtr(change.ID), strPtr(req.System+": "+req.Description))
 	if h.Hub != nil {
 		h.Hub.Publish(SSEEvent{Type: "change.updated", Data: change})
 	}
@@ -146,8 +146,8 @@ func (h *ChangeHandler) Delete(c echo.Context) error {
 		return err
 	}
 
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
+	id := c.Param("id")
+	if _, err := uuid.Parse(id); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid change ID"})
 	}
 
@@ -164,9 +164,9 @@ func (h *ChangeHandler) Delete(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to delete change"})
 	}
 
-	auditLog(h.DB, c, "change.delete", "change", uint64Ptr(id), strPtr(change.System+": "+change.Description))
+	auditLog(h.DB, c, "change.delete", "change", nil, strPtr(id), strPtr(change.System+": "+change.Description))
 	if h.Hub != nil {
-		h.Hub.Publish(SSEEvent{Type: "change.deleted", Data: DeletedPayload{ID: fmt.Sprintf("%d", id)}})
+		h.Hub.Publish(SSEEvent{Type: "change.deleted", Data: DeletedPayload{ID: id}})
 	}
 	return c.JSON(http.StatusOK, map[string]string{"message": "Change deleted"})
 }

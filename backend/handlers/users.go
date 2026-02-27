@@ -109,7 +109,7 @@ func (h *UserHandler) Create(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create user"})
 	}
 
-	auditLog(h.DB, c, "user.create", "user", uint64Ptr(user.ID), strPtr(req.Email))
+	auditLog(h.DB, c, "user.create", "user", uint64Ptr(user.ID), nil, strPtr(req.Email))
 	return c.JSON(http.StatusCreated, map[string]interface{}{
 		"user":              user,
 		"temporaryPassword": tempPassword,
@@ -145,7 +145,7 @@ func (h *UserHandler) UpdateRole(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update role"})
 	}
 
-	auditLog(h.DB, c, "user.role_change", "user", uint64Ptr(targetID), strPtr("role changed to "+req.Role))
+	auditLog(h.DB, c, "user.role_change", "user", uint64Ptr(targetID), nil, strPtr("role changed to "+req.Role))
 
 	user, err := models.GetUserByID(h.DB, targetID)
 	if err != nil {
@@ -184,7 +184,7 @@ func (h *UserHandler) UpdateStatus(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update status"})
 	}
 
-	auditLog(h.DB, c, "user.status_change", "user", uint64Ptr(targetID), strPtr("status changed to "+req.Status))
+	auditLog(h.DB, c, "user.status_change", "user", uint64Ptr(targetID), nil, strPtr("status changed to "+req.Status))
 
 	user, err := models.GetUserByID(h.DB, targetID)
 	if err != nil {
@@ -225,6 +225,6 @@ func (h *UserHandler) ResetPassword(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to reset password"})
 	}
 
-	auditLog(h.DB, c, "user.password_reset", "user", uint64Ptr(targetID), nil)
+	auditLog(h.DB, c, "user.password_reset", "user", uint64Ptr(targetID), nil, nil)
 	return c.JSON(http.StatusOK, map[string]string{"temporaryPassword": tempPassword})
 }

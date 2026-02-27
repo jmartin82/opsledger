@@ -29,11 +29,11 @@ func extractActor(c echo.Context) (string, *uint64) {
 	return "unknown", nil
 }
 
-func auditLog(db *sql.DB, c echo.Context, action, targetType string, targetID *uint64, details *string) {
+func auditLog(db *sql.DB, c echo.Context, action, targetType string, targetID *uint64, targetUUID *string, details *string) {
 	actor, actorID := extractActor(c)
 	ip := c.RealIP()
 	go func() {
-		if err := models.CreateAuditEntry(db, actor, actorID, action, targetType, targetID, details, &ip); err != nil {
+		if err := models.CreateAuditEntry(db, actor, actorID, action, targetType, targetID, targetUUID, details, &ip); err != nil {
 			log.Printf("audit: failed to log %s: %v", action, err)
 		}
 	}()

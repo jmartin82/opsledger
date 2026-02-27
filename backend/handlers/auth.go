@@ -72,7 +72,7 @@ func (h *AuthHandler) Register(c echo.Context) error {
 	}
 
 	_ = models.UpdateLastLogin(h.DB, user.ID)
-	auditLog(h.DB, c, "user.register", "user", uint64Ptr(user.ID), strPtr(user.Email))
+	auditLog(h.DB, c, "user.register", "user", uint64Ptr(user.ID), nil, strPtr(user.Email))
 
 	token, err := h.generateToken(user)
 	if err != nil {
@@ -104,7 +104,7 @@ func (h *AuthHandler) Login(c echo.Context) error {
 	}
 
 	_ = models.UpdateLastLogin(h.DB, user.ID)
-	auditLog(h.DB, c, "user.login", "user", uint64Ptr(user.ID), strPtr(user.Email))
+	auditLog(h.DB, c, "user.login", "user", uint64Ptr(user.ID), nil, strPtr(user.Email))
 
 	token, err := h.generateToken(user)
 	if err != nil {
@@ -183,7 +183,7 @@ func (h *AuthHandler) ChangePassword(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update password"})
 	}
 
-	auditLog(h.DB, c, "user.password_change", "user", uint64Ptr(id), strPtr(user.Email))
+	auditLog(h.DB, c, "user.password_change", "user", uint64Ptr(id), nil, strPtr(user.Email))
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "Password updated"})
 }

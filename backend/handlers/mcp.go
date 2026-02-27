@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -133,7 +132,7 @@ func (h *MCPHandler) handleToolsList() map[string]any {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"id":          map[string]any{"type": "integer", "description": "Numeric ID of the change record to correct, as returned by `register_change` or `list_changes`"},
+					"id":          map[string]any{"type": "string", "description": "UUID of the change record to update, as returned by `register_change` or `list_changes`"},
 					"system":      map[string]any{"type": "string", "description": "Name of the system or component that was changed (e.g. 'api-service', 'terraform/aws-prod', 'postgres-primary', 'k8s/ingress')"},
 					"type":        map[string]any{"type": "string", "description": "Category of change: `deployment` = new release, rollback, or container image update; `infrastructure` = cloud resource, IaC, Kubernetes, networking, or security change; `configuration` = environment variable, secret, feature flag, settings file, or CI/CD pipeline change"},
 					"description": map[string]any{"type": "string", "description": "Human-readable summary of exactly what changed and why. Be specific: include version numbers, resource names, key names (not values), before/after values where relevant. Examples: 'Deployed v2.4.1 (was v2.3.9) to fix memory leak in worker', 'Set MAX_CONNECTIONS=100 (was 50) to handle load increase', 'Applied terraform plan: added sg-0abc123 ingress rule for port 443'"},
@@ -150,7 +149,7 @@ func (h *MCPHandler) handleToolsList() map[string]any {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"id": map[string]any{"type": "integer", "description": "Numeric ID of the change record to delete, as returned by `register_change` or `list_changes`"},
+					"id": map[string]any{"type": "string", "description": "UUID of the change record to delete, as returned by `register_change` or `list_changes`"},
 				},
 				"required": []string{"id"},
 			},
@@ -257,7 +256,7 @@ func (h *MCPHandler) createChange(ctx context.Context, args map[string]any) (int
 	}
 
 	detail := system + ": " + description
-	_ = models.CreateAuditEntry(h.DB, "mcp", nil, "change.create", "change", uint64Ptr(change.ID), &detail, nil)
+	_ = models.CreateAuditEntry(h.DB, "mcp", nil, "change.create", "change", nil, strPtr(change.ID), &detail, nil)
 
 	if h.Hub != nil {
 		h.Hub.Publish(SSEEvent{Type: "change.created", Data: change})
@@ -266,8 +265,8 @@ func (h *MCPHandler) createChange(ctx context.Context, args map[string]any) (int
 }
 
 func (h *MCPHandler) updateChange(ctx context.Context, args map[string]any) (interface{}, *RPCError) {
-	id := getIntArg(args, "id", 0)
-	if id <= 0 {
+	id := getStringArg(args, "id")
+	if id == "" {
 		return nil, &RPCError{Code: -32602, Message: "id is required"}
 	}
 
@@ -303,7 +302,7 @@ func (h *MCPHandler) updateChange(ctx context.Context, args map[string]any) (int
 		ts = &parsed
 	}
 
-	change, err := models.UpdateChange(h.DB, uint64(id), system, environment, user, typeStr, description, ts)
+	change, err := models.UpdateChange(h.DB, id, system, environment, user, typeStr, description, ts)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, &RPCError{Code: -32602, Message: "Change not found"}
@@ -312,7 +311,7 @@ func (h *MCPHandler) updateChange(ctx context.Context, args map[string]any) (int
 	}
 
 	detail := system + ": " + description
-	_ = models.CreateAuditEntry(h.DB, "mcp", nil, "change.update", "change", uint64Ptr(change.ID), &detail, nil)
+	_ = models.CreateAuditEntry(h.DB, "mcp", nil, "change.update", "change", nil, strPtr(change.ID), &detail, nil)
 
 	if h.Hub != nil {
 		h.Hub.Publish(SSEEvent{Type: "change.updated", Data: change})
@@ -321,13 +320,13 @@ func (h *MCPHandler) updateChange(ctx context.Context, args map[string]any) (int
 }
 
 func (h *MCPHandler) deleteChange(ctx context.Context, args map[string]any) (interface{}, *RPCError) {
-	id := getIntArg(args, "id", 0)
-	if id <= 0 {
+	id := getStringArg(args, "id")
+	if id == "" {
 		return nil, &RPCError{Code: -32602, Message: "id is required"}
 	}
 
 	// Fetch for audit log details
-	change, err := models.GetChangeByID(h.DB, uint64(id))
+	change, err := models.GetChangeByID(h.DB, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, &RPCError{Code: -32602, Message: "Change not found"}
@@ -335,15 +334,15 @@ func (h *MCPHandler) deleteChange(ctx context.Context, args map[string]any) (int
 		return nil, &RPCError{Code: -32000, Message: "Failed to fetch change: " + err.Error()}
 	}
 
-	if err := models.DeleteChange(h.DB, uint64(id)); err != nil {
+	if err := models.DeleteChange(h.DB, id); err != nil {
 		return nil, &RPCError{Code: -32000, Message: "Failed to delete change: " + err.Error()}
 	}
 
 	detail := change.System + ": " + change.Description
-	_ = models.CreateAuditEntry(h.DB, "mcp", nil, "change.delete", "change", uint64Ptr(uint64(id)), &detail, nil)
+	_ = models.CreateAuditEntry(h.DB, "mcp", nil, "change.delete", "change", nil, strPtr(id), &detail, nil)
 
 	if h.Hub != nil {
-		h.Hub.Publish(SSEEvent{Type: "change.deleted", Data: DeletedPayload{ID: fmt.Sprintf("%d", id)}})
+		h.Hub.Publish(SSEEvent{Type: "change.deleted", Data: DeletedPayload{ID: id}})
 	}
 	return map[string]string{"message": "Change deleted"}, nil
 }

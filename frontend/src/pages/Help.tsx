@@ -128,7 +128,7 @@ const Help = () => {
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Response (201 Created)</p>
                 <CodeBlock language="json" code={`{
-  "id": "01HX2K4P9QRZF7TJ5V3NS8BW6E",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
   "system": "api-gateway",
   "environment": "production",
   "user": "diana.kim",
@@ -146,7 +146,7 @@ const Help = () => {
               </p>
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Request</p>
-                <CodeBlock language="bash" code={`curl -X PUT ${baseUrl}/changes/42 \\
+                <CodeBlock language="bash" code={`curl -X PUT ${baseUrl}/changes/550e8400-e29b-41d4-a716-446655440000 \\
   -H "Authorization: Bearer ${apiKey}" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -183,7 +183,7 @@ const Help = () => {
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Response (200 OK)</p>
                 <CodeBlock language="json" code={`{
-  "id": "42",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
   "system": "api-gateway",
   "environment": "production",
   "user": "diana.kim",
@@ -201,7 +201,7 @@ const Help = () => {
               </p>
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Request</p>
-                <CodeBlock language="bash" code={`curl -X DELETE ${baseUrl}/changes/42 \\
+                <CodeBlock language="bash" code={`curl -X DELETE ${baseUrl}/changes/550e8400-e29b-41d4-a716-446655440000 \\
   -H "Authorization: Bearer ${apiKey}"`} />
               </div>
               <div className="space-y-2">
@@ -297,7 +297,7 @@ const Help = () => {
 {
   "changes": [
     {
-      "id": "01HX2K4P9Q...",
+      "id": "550e8400-e29b-41d4-a716-446655440000",
       "system": "api-gateway",
       "environment": "production",
       "type": "deployment",
@@ -315,7 +315,7 @@ const Help = () => {
 {
   "tool": "update_change",
   "parameters": {
-    "id": 42,
+    "id": "550e8400-e29b-41d4-a716-446655440000",
     "system": "api-gateway",
     "environment": "production",
     "type": "deployment",
@@ -327,7 +327,7 @@ const Help = () => {
 
 // Response
 {
-  "id": "42",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
   "system": "api-gateway",
   "environment": "production",
   "type": "deployment",
@@ -343,7 +343,7 @@ const Help = () => {
 {
   "tool": "delete_change",
   "parameters": {
-    "id": 42
+    "id": "550e8400-e29b-41d4-a716-446655440000"
   }
 }
 
@@ -370,8 +370,12 @@ const Help = () => {
 
 // Response
 {
-  "id": "01HX2K9MTRSZF7TJ5V3NS8BW6E",
-  "status": "created",
+  "id": "661e8400-e29b-41d4-a716-446655440001",
+  "system": "billing-service",
+  "environment": "production",
+  "user": "ci-pipeline",
+  "type": "deployment",
+  "description": "Automated deployment of billing-service v3.1.0 via CI pipeline",
   "timestamp": "2025-02-19T15:00:00.000Z"
 }`} />
             </Section>

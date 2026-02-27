@@ -18,6 +18,8 @@ import (
 	"ops-ledger/backend/models"
 )
 
+const testUUID = "550e8400-e29b-41d4-a716-446655440000"
+
 func setupChangeContext(method, path, body, role string, userID uint64, apiKeyScopes []string) (echo.Context, *httptest.ResponseRecorder) {
 	e := echo.New()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -53,18 +55,18 @@ func TestChangeCreate_Success(t *testing.T) {
 
 	h := &ChangeHandler{DB: db}
 
-	// Insert change
+	// Insert change — UUID is generated at runtime, use AnyArg()
 	mock.ExpectExec("INSERT INTO changes").
-		WithArgs("production", "prod", "ci-bot", "deployment", "Deployed v1.2.0").
-		WillReturnResult(sqlmock.NewResult(1, 1))
+		WithArgs(sqlmock.AnyArg(), "production", "prod", "ci-bot", "deployment", "Deployed v1.2.0").
+		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	// GetChangeByID
 	now := time.Now()
 	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
-		WithArgs(uint64(1)).
+		WithArgs(sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "system", "environment", "user", "type", "description", "created_at",
-		}).AddRow(1, "production", "prod", "ci-bot", "deployment", "Deployed v1.2.0", now))
+		}).AddRow(testUUID, "production", "prod", "ci-bot", "deployment", "Deployed v1.2.0", now))
 
 	env := "prod"
 	user := "ci-bot"
@@ -193,14 +195,14 @@ func TestChangeCreate_EmptyEnvironmentAndUser(t *testing.T) {
 
 	// Empty strings should be normalized to nil
 	mock.ExpectExec("INSERT INTO changes").
-		WithArgs("test-system", nil, nil, "deployment", "Test description").
-		WillReturnResult(sqlmock.NewResult(1, 1))
+		WithArgs(sqlmock.AnyArg(), "test-system", nil, nil, "deployment", "Test description").
+		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	now := time.Now()
 	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "system", "environment", "user", "type", "description", "created_at",
-		}).AddRow(1, "test-system", nil, nil, "deployment", "Test description", now))
+		}).AddRow(testUUID, "test-system", nil, nil, "deployment", "Test description", now))
 
 	// Send empty strings
 	body := `{"system":"test-system","environment":"","user":"","type":"deployment","description":"Test description"}`
@@ -227,17 +229,17 @@ func TestChangeCreate_WithTimestamp(t *testing.T) {
 
 	h := &ChangeHandler{DB: db}
 
-	// With explicit timestamp, the INSERT includes created_at (6 args)
+	// With explicit timestamp, the INSERT includes created_at (7 args: id + 6 fields)
 	mock.ExpectExec("INSERT INTO changes").
-		WithArgs("production", "prod", "ci-bot", "deployment", "Deployed v1.2.0", sqlmock.AnyArg()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
+		WithArgs(sqlmock.AnyArg(), "production", "prod", "ci-bot", "deployment", "Deployed v1.2.0", sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	now := time.Now()
 	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
-		WithArgs(uint64(1)).
+		WithArgs(sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "system", "environment", "user", "type", "description", "created_at",
-		}).AddRow(1, "production", "prod", "ci-bot", "deployment", "Deployed v1.2.0", now))
+		}).AddRow(testUUID, "production", "prod", "ci-bot", "deployment", "Deployed v1.2.0", now))
 
 	body := `{"system":"production","environment":"prod","user":"ci-bot","type":"deployment","description":"Deployed v1.2.0","timestamp":"2025-01-15T10:30:00Z"}`
 	c, rec := setupChangeContext(http.MethodPost, "/api/changes", body, "admin", 1, nil)
@@ -300,8 +302,8 @@ func TestChangeList_Success(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "system", "environment", "user", "type", "description", "created_at",
 		}).
-			AddRow(1, "prod", "prod", "admin", "deployment", "Deployed v1.0", now).
-			AddRow(2, "staging", "staging", "ci", "configuration", "Updated config", now))
+			AddRow(testUUID, "prod", "prod", "admin", "deployment", "Deployed v1.0", now).
+			AddRow("661e8400-e29b-41d4-a716-446655440001", "staging", "staging", "ci", "configuration", "Updated config", now))
 
 	c, rec := setupChangeContext(http.MethodGet, "/api/changes", "", "viewer", 1, nil)
 
@@ -345,7 +347,7 @@ func TestChangeList_Filters(t *testing.T) {
 	mock.ExpectQuery("SELECT .+ FROM changes").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "system", "environment", "user", "type", "description", "created_at",
-		}).AddRow(1, "prod", "prod", "admin", "deployment", "Test", time.Now()))
+		}).AddRow(testUUID, "prod", "prod", "admin", "deployment", "Test", time.Now()))
 
 	c, rec := setupChangeContext(http.MethodGet, "/api/changes?system=prod&type=deployment", "", "viewer", 1, nil)
 
@@ -373,7 +375,7 @@ func TestChangeList_Pagination(t *testing.T) {
 	mock.ExpectQuery("SELECT COUNT").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(100))
 	mock.ExpectQuery("SELECT .+ FROM changes").WillReturnRows(sqlmock.NewRows([]string{
 		"id", "system", "environment", "user", "type", "description", "created_at",
-	}).AddRow(1, "test", nil, nil, "deployment", "Test", time.Now()))
+	}).AddRow(testUUID, "test", nil, nil, "deployment", "Test", time.Now()))
 
 	c, rec := setupChangeContext(http.MethodGet, "/api/changes?limit=10&offset=5", "", "viewer", 1, nil)
 
@@ -520,20 +522,20 @@ func TestChangeUpdate_Success(t *testing.T) {
 	h := &ChangeHandler{DB: db}
 
 	mock.ExpectExec("UPDATE changes SET").
-		WithArgs("api-gateway", "staging", "alice", "deployment", "Updated deploy", uint64(1)).
+		WithArgs("api-gateway", "staging", "alice", "deployment", "Updated deploy", testUUID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	now := time.Now()
 	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
-		WithArgs(uint64(1)).
+		WithArgs(testUUID).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "system", "environment", "user", "type", "description", "created_at",
-		}).AddRow(1, "api-gateway", "staging", "alice", "deployment", "Updated deploy", now))
+		}).AddRow(testUUID, "api-gateway", "staging", "alice", "deployment", "Updated deploy", now))
 
 	body := `{"system":"api-gateway","environment":"staging","user":"alice","type":"deployment","description":"Updated deploy"}`
-	c, rec := setupChangeContext(http.MethodPut, "/api/changes/1", body, "admin", 1, nil)
+	c, rec := setupChangeContext(http.MethodPut, "/api/changes/"+testUUID, body, "admin", 1, nil)
 	c.SetParamNames("id")
-	c.SetParamValues("1")
+	c.SetParamValues(testUUID)
 
 	_ = h.Update(c)
 	if rec.Code != http.StatusOK {
@@ -562,20 +564,20 @@ func TestChangeUpdate_WithTimestamp(t *testing.T) {
 
 	// With explicit timestamp, the UPDATE includes created_at (7 args)
 	mock.ExpectExec("UPDATE changes SET").
-		WithArgs("api-gateway", "staging", "alice", "deployment", "Updated deploy", sqlmock.AnyArg(), uint64(1)).
+		WithArgs("api-gateway", "staging", "alice", "deployment", "Updated deploy", sqlmock.AnyArg(), testUUID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	now := time.Now()
 	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
-		WithArgs(uint64(1)).
+		WithArgs(testUUID).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "system", "environment", "user", "type", "description", "created_at",
-		}).AddRow(1, "api-gateway", "staging", "alice", "deployment", "Updated deploy", now))
+		}).AddRow(testUUID, "api-gateway", "staging", "alice", "deployment", "Updated deploy", now))
 
 	body := `{"system":"api-gateway","environment":"staging","user":"alice","type":"deployment","description":"Updated deploy","timestamp":"2025-01-15T10:30:00Z"}`
-	c, rec := setupChangeContext(http.MethodPut, "/api/changes/1", body, "admin", 1, nil)
+	c, rec := setupChangeContext(http.MethodPut, "/api/changes/"+testUUID, body, "admin", 1, nil)
 	c.SetParamNames("id")
-	c.SetParamValues("1")
+	c.SetParamValues(testUUID)
 
 	_ = h.Update(c)
 	if rec.Code != http.StatusOK {
@@ -597,9 +599,9 @@ func TestChangeUpdate_InvalidTimestamp(t *testing.T) {
 	h := &ChangeHandler{DB: db}
 
 	body := `{"system":"test","type":"deployment","description":"test","timestamp":"bad-format"}`
-	c, rec := setupChangeContext(http.MethodPut, "/api/changes/1", body, "admin", 1, nil)
+	c, rec := setupChangeContext(http.MethodPut, "/api/changes/"+testUUID, body, "admin", 1, nil)
 	c.SetParamNames("id")
-	c.SetParamValues("1")
+	c.SetParamValues(testUUID)
 
 	_ = h.Update(c)
 	if rec.Code != http.StatusBadRequest {
@@ -623,9 +625,9 @@ func TestChangeUpdate_NotFound(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	body := `{"system":"test","type":"deployment","description":"test"}`
-	c, rec := setupChangeContext(http.MethodPut, "/api/changes/999", body, "admin", 1, nil)
+	c, rec := setupChangeContext(http.MethodPut, "/api/changes/"+testUUID, body, "admin", 1, nil)
 	c.SetParamNames("id")
-	c.SetParamValues("999")
+	c.SetParamValues(testUUID)
 
 	_ = h.Update(c)
 	if rec.Code != http.StatusNotFound {
@@ -643,9 +645,9 @@ func TestChangeUpdate_ViewerForbidden(t *testing.T) {
 	h := &ChangeHandler{DB: db}
 
 	body := `{"system":"test","type":"deployment","description":"test"}`
-	c, rec := setupChangeContext(http.MethodPut, "/api/changes/1", body, "viewer", 1, nil)
+	c, rec := setupChangeContext(http.MethodPut, "/api/changes/"+testUUID, body, "viewer", 1, nil)
 	c.SetParamNames("id")
-	c.SetParamValues("1")
+	c.SetParamValues(testUUID)
 
 	_ = h.Update(c)
 	if rec.Code != http.StatusForbidden {
@@ -669,12 +671,12 @@ func TestChangeUpdate_APIKeyWithWriteScope(t *testing.T) {
 	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "system", "environment", "user", "type", "description", "created_at",
-		}).AddRow(1, "test", nil, nil, "deployment", "test", now))
+		}).AddRow(testUUID, "test", nil, nil, "deployment", "test", now))
 
 	body := `{"system":"test","type":"deployment","description":"test"}`
-	c, rec := setupChangeContext(http.MethodPut, "/api/changes/1", body, "", 0, []string{"changes:write"})
+	c, rec := setupChangeContext(http.MethodPut, "/api/changes/"+testUUID, body, "", 0, []string{"changes:write"})
 	c.SetParamNames("id")
-	c.SetParamValues("1")
+	c.SetParamValues(testUUID)
 
 	_ = h.Update(c)
 	if rec.Code != http.StatusOK {
@@ -692,9 +694,9 @@ func TestChangeUpdate_APIKeyMissingWriteScope(t *testing.T) {
 	h := &ChangeHandler{DB: db}
 
 	body := `{"system":"test","type":"deployment","description":"test"}`
-	c, rec := setupChangeContext(http.MethodPut, "/api/changes/1", body, "", 0, []string{"changes:read"})
+	c, rec := setupChangeContext(http.MethodPut, "/api/changes/"+testUUID, body, "", 0, []string{"changes:read"})
 	c.SetParamNames("id")
-	c.SetParamValues("1")
+	c.SetParamValues(testUUID)
 
 	_ = h.Update(c)
 	if rec.Code != http.StatusForbidden {
@@ -742,9 +744,9 @@ func TestChangeUpdate_MissingFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c, rec := setupChangeContext(http.MethodPut, "/api/changes/1", tt.body, "admin", 1, nil)
+			c, rec := setupChangeContext(http.MethodPut, "/api/changes/"+testUUID, tt.body, "admin", 1, nil)
 			c.SetParamNames("id")
-			c.SetParamValues("1")
+			c.SetParamValues(testUUID)
 			_ = h.Update(c)
 			if rec.Code != http.StatusBadRequest {
 				t.Errorf("expected 400, got %d: %s", rec.Code, rec.Body.String())
@@ -763,9 +765,9 @@ func TestChangeUpdate_InvalidType(t *testing.T) {
 	h := &ChangeHandler{DB: db}
 
 	body := `{"system":"test","type":"invalid","description":"test"}`
-	c, rec := setupChangeContext(http.MethodPut, "/api/changes/1", body, "admin", 1, nil)
+	c, rec := setupChangeContext(http.MethodPut, "/api/changes/"+testUUID, body, "admin", 1, nil)
 	c.SetParamNames("id")
-	c.SetParamValues("1")
+	c.SetParamValues(testUUID)
 
 	_ = h.Update(c)
 	if rec.Code != http.StatusBadRequest {
@@ -789,19 +791,19 @@ func TestChangeDelete_Success(t *testing.T) {
 	now := time.Now()
 	// Fetch for audit log
 	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
-		WithArgs(uint64(1)).
+		WithArgs(testUUID).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "system", "environment", "user", "type", "description", "created_at",
-		}).AddRow(1, "prod", "production", "admin", "deployment", "Deploy v1", now))
+		}).AddRow(testUUID, "prod", "production", "admin", "deployment", "Deploy v1", now))
 
 	// Delete
 	mock.ExpectExec("DELETE FROM changes WHERE id").
-		WithArgs(uint64(1)).
+		WithArgs(testUUID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	c, rec := setupChangeContext(http.MethodDelete, "/api/changes/1", "", "admin", 1, nil)
+	c, rec := setupChangeContext(http.MethodDelete, "/api/changes/"+testUUID, "", "admin", 1, nil)
 	c.SetParamNames("id")
-	c.SetParamValues("1")
+	c.SetParamValues(testUUID)
 
 	_ = h.Delete(c)
 	if rec.Code != http.StatusOK {
@@ -829,12 +831,12 @@ func TestChangeDelete_NotFound(t *testing.T) {
 	h := &ChangeHandler{DB: db}
 
 	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
-		WithArgs(uint64(999)).
+		WithArgs(testUUID).
 		WillReturnError(sql.ErrNoRows)
 
-	c, rec := setupChangeContext(http.MethodDelete, "/api/changes/999", "", "admin", 1, nil)
+	c, rec := setupChangeContext(http.MethodDelete, "/api/changes/"+testUUID, "", "admin", 1, nil)
 	c.SetParamNames("id")
-	c.SetParamValues("999")
+	c.SetParamValues(testUUID)
 
 	_ = h.Delete(c)
 	if rec.Code != http.StatusNotFound {
@@ -851,9 +853,9 @@ func TestChangeDelete_ViewerForbidden(t *testing.T) {
 
 	h := &ChangeHandler{DB: db}
 
-	c, rec := setupChangeContext(http.MethodDelete, "/api/changes/1", "", "viewer", 1, nil)
+	c, rec := setupChangeContext(http.MethodDelete, "/api/changes/"+testUUID, "", "viewer", 1, nil)
 	c.SetParamNames("id")
-	c.SetParamValues("1")
+	c.SetParamValues(testUUID)
 
 	_ = h.Delete(c)
 	if rec.Code != http.StatusForbidden {
@@ -874,14 +876,14 @@ func TestChangeDelete_APIKeyWithWriteScope(t *testing.T) {
 	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "system", "environment", "user", "type", "description", "created_at",
-		}).AddRow(1, "test", nil, nil, "deployment", "test", now))
+		}).AddRow(testUUID, "test", nil, nil, "deployment", "test", now))
 
 	mock.ExpectExec("DELETE FROM changes WHERE id").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	c, rec := setupChangeContext(http.MethodDelete, "/api/changes/1", "", "", 0, []string{"changes:write"})
+	c, rec := setupChangeContext(http.MethodDelete, "/api/changes/"+testUUID, "", "", 0, []string{"changes:write"})
 	c.SetParamNames("id")
-	c.SetParamValues("1")
+	c.SetParamValues(testUUID)
 
 	_ = h.Delete(c)
 	if rec.Code != http.StatusOK {
@@ -898,9 +900,9 @@ func TestChangeDelete_APIKeyMissingWriteScope(t *testing.T) {
 
 	h := &ChangeHandler{DB: db}
 
-	c, rec := setupChangeContext(http.MethodDelete, "/api/changes/1", "", "", 0, []string{"changes:read"})
+	c, rec := setupChangeContext(http.MethodDelete, "/api/changes/"+testUUID, "", "", 0, []string{"changes:read"})
 	c.SetParamNames("id")
-	c.SetParamValues("1")
+	c.SetParamValues(testUUID)
 
 	_ = h.Delete(c)
 	if rec.Code != http.StatusForbidden {

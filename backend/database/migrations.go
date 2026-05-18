@@ -2,18 +2,7 @@ package database
 
 import (
 	"database/sql"
-	"strings"
 )
-
-// isMySQLDupErr returns true for MySQL "duplicate column" (1060) or "duplicate key name" (1061).
-func isMySQLDupErr(err error) bool {
-	if err == nil {
-		return false
-	}
-	s := err.Error()
-	return strings.Contains(s, "Error 1060") || strings.Contains(s, "Duplicate column") ||
-		strings.Contains(s, "Error 1061") || strings.Contains(s, "Duplicate key name")
-}
 
 func Migrate(db *sql.DB) error {
 	_, err := db.Exec(`
@@ -76,30 +65,6 @@ func Migrate(db *sql.DB) error {
 		return err
 	}
 
-	// Idempotent schema upgrades for existing deployments.
-	migrations := []string{
-		`ALTER TABLE changes ADD COLUMN status ENUM('executed','scheduled') NULL`,
-		`ALTER TABLE changes ADD COLUMN event_at DATETIME NULL`,
-		`UPDATE changes SET event_at = created_at WHERE event_at IS NULL`,
-		`UPDATE changes SET status = 'executed' WHERE status IS NULL`,
-		`ALTER TABLE changes MODIFY COLUMN status ENUM('executed','scheduled') NOT NULL DEFAULT 'executed'`,
-		`ALTER TABLE changes MODIFY COLUMN event_at DATETIME NOT NULL`,
-		`ALTER TABLE changes ADD INDEX idx_changes_event_at (event_at DESC)`,
-		`ALTER TABLE changes ADD INDEX idx_changes_status (status)`,
-	}
-	for _, m := range migrations {
-		if _, merr := db.Exec(m); merr != nil && !isMySQLDupErr(merr) {
-			// UPDATE and MODIFY statements won't trigger dup errors; only ADD COLUMN/INDEX can.
-			// Re-check: skip dup errors only for structural DDL, propagate data errors.
-			if strings.HasPrefix(m, "UPDATE ") || strings.HasPrefix(m, "ALTER TABLE changes MODIFY") {
-				return merr
-			}
-			if !isMySQLDupErr(merr) {
-				return merr
-			}
-		}
-	}
-
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS audit_log (
 			id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -115,6 +80,37 @@ func Migrate(db *sql.DB) error {
 			INDEX idx_audit_log_created_at (created_at DESC),
 			INDEX idx_audit_log_action (action),
 			INDEX idx_audit_log_actor (actor)
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS connectors (
+			id         CHAR(36) NOT NULL PRIMARY KEY,
+			name       VARCHAR(255) NOT NULL,
+			type       VARCHAR(50) NOT NULL,
+			secret     CHAR(64) NOT NULL,
+			enabled    BOOLEAN NOT NULL DEFAULT TRUE,
+			created_by BIGINT UNSIGNED NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			INDEX idx_connectors_enabled (enabled),
+			FOREIGN KEY (created_by) REFERENCES users(id)
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS jira_connectors (
+			connector_id CHAR(36) NOT NULL PRIMARY KEY,
+			jira_url     VARCHAR(500) NOT NULL,
+			api_token    TEXT NOT NULL,
+			mapping      JSON NOT NULL,
+			FOREIGN KEY (connector_id) REFERENCES connectors(id) ON DELETE CASCADE
 		)
 	`)
 	return err

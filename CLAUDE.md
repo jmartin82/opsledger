@@ -50,7 +50,7 @@ Handlers check for auth type by testing which context values are present (claims
 
 **MCP endpoint** (`POST /mcp`): Unauthenticated JSON-RPC 2.0 handler — does not go through auth middleware. Implements `initialize`, `tools/list`, and `tools/call` methods.
 
-**Database migrations**: `database/migrations.go` uses `CREATE TABLE IF NOT EXISTS` — no migration versioning system. Three tables: `users`, `api_keys`, `changes`.
+**Database migrations**: `database/migrations.go` uses `CREATE TABLE IF NOT EXISTS` — no migration versioning system. Three tables: `users`, `api_keys`, `changes`. Additive schema changes go in the ALTER TABLE block that runs after the CREATE TABLE statements; use `isMySQLDupErr()` to swallow duplicate-column/index errors (MySQL 1060/1061) so migrations stay idempotent.
 
 ### Frontend (React/TypeScript)
 
@@ -68,6 +68,17 @@ Test naming convention: unit tests start with `Test`, integration tests start wi
 ## Environment Variables (backend)
 
 `PORT`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `JWT_SECRET` — all have dev defaults in `config/config.go` so the backend runs without a .env file against local MariaDB.
+
+## Change status model
+
+The `changes` table has two fields that work together:
+
+- `event_at` — authoritative "when": execution time for executed changes, planned date for scheduled ones. Exposed as `"timestamp"` in the JSON API for backwards compatibility.
+- `status` — `'executed'` (default) or `'scheduled'`. **Overdue is not stored** — it is computed wherever needed as `status = 'scheduled' AND event_at < NOW()`. The `?status=overdue` query filter and the `passesFilters` SSE helper in the frontend both implement this same logic.
+
+`models.ErrAlreadyExecuted` is a sentinel error returned by `ConfirmChange` when the change is already executed; the handler maps it to HTTP 409.
+
+When adding new columns to `changes`, update the shared `changeColumns` slice and `addChangeRow` helper in `handlers/changes_test.go` — all mock SELECT rows must stay in sync with the actual column order.
 
 ## Roles
 

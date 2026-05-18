@@ -21,11 +21,11 @@ const Admin = () => {
           </p>
         </div>
 
-        <Tabs defaultValue="sso">
+        <Tabs defaultValue="users">
           <TabsList className="bg-secondary mb-6 h-auto p-1 gap-1 w-full">
             {[
-              { value: 'sso', label: 'SSO', icon: Shield },
               { value: 'users', label: 'Users', icon: Users },
+              { value: 'sso', label: 'SSO', icon: Shield },
               { value: 'api-keys', label: 'API Keys', icon: Key },
               { value: 'audit', label: 'Audit Log', icon: Activity },
             ].map(({ value, label, icon: Icon }) => (

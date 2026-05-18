@@ -1,5 +1,5 @@
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Activity, Plus, BookOpen, Zap, Shield, LogOut, ChevronDown, User, CalendarDays } from 'lucide-react';
+import { Activity, Plus, BookOpen, Zap, Shield, LogOut, ChevronDown, User, CalendarDays, Plug } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLive } from '@/contexts/LiveContext';
@@ -18,6 +18,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     { to: '/calendar', label: 'Calendar', icon: CalendarDays, exact: false, show: true },
     { to: '/add', label: 'Register Change', icon: Plus, show: can('register_changes') },
     { to: '/help', label: 'API & MCP', icon: BookOpen, show: true },
+    { to: '/connectors', label: 'Connectors', icon: Plug, show: can('view_admin') },
     { to: '/admin', label: 'Access & Security', icon: Shield, show: can('view_admin') },
   ].filter(i => i.show);
 

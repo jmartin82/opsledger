@@ -82,6 +82,14 @@ func main() {
 	changesGroup.DELETE("/:id", changes.Delete)
 	changesGroup.PATCH("/:id/confirm", changes.Confirm)
 
+	connectors := &handlers.ConnectorHandler{DB: db, Hub: hub}
+	admin.GET("/connectors", connectors.List)
+	admin.POST("/connectors", connectors.Create)
+	admin.PUT("/connectors/:id", connectors.Update)
+	admin.DELETE("/connectors/:id", connectors.Delete)
+	// Webhook receiver: no auth middleware — secret verified inside the handler
+	api.POST("/connectors/:id/webhook", connectors.Webhook)
+
 	// SSE live events endpoint
 	eventHandler := &handlers.EventHandler{Hub: hub}
 	api.GET("/events", eventHandler.Stream, middleware.SSEAuth(cfg.JWTSecret))

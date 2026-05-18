@@ -13,6 +13,7 @@ import Admin from "./pages/Admin";
 import Account from "./pages/Account";
 import Login from "./pages/Login";
 import CalendarPage from "./pages/Calendar";
+import Connectors from "./pages/Connectors";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const App = () => (
 
             {/* Protected — admin only */}
             <Route path="/admin" element={<RequireAuth minRole="admin"><Admin /></RequireAuth>} />
+            <Route path="/connectors" element={<RequireAuth minRole="admin"><Connectors /></RequireAuth>} />
 
             {/* Catch-all */}
             <Route path="*" element={<NotFound />} />

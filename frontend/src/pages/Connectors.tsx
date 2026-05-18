@@ -249,7 +249,7 @@ const Connectors = () => {
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto">
+      <div>
         <div className="mb-6 flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -289,71 +289,106 @@ const Connectors = () => {
         )}
 
         {!loading && !error && connectors.length > 0 && (
-          <div className="space-y-3">
-            {connectors.map(c => (
-              <div key={c.id} className={cn(
-                'border border-border rounded-lg p-4 bg-card transition-opacity',
-                !c.enabled && 'opacity-60'
-              )}>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className={cn(
-                      'w-2 h-2 rounded-full shrink-0',
-                      c.enabled ? 'bg-green-500' : 'bg-muted-foreground/40'
-                    )} />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-foreground">{c.name}</span>
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground font-mono">{c.type}</span>
-                        {!c.enabled && <span className="text-xs text-muted-foreground">disabled</span>}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              {connectors.map(c => (
+                <div key={c.id} className={cn(
+                  'border border-border rounded-lg p-4 bg-card transition-opacity',
+                  !c.enabled && 'opacity-60'
+                )}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={cn(
+                        'w-2 h-2 rounded-full shrink-0',
+                        c.enabled ? 'bg-green-500' : 'bg-muted-foreground/40'
+                      )} />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-foreground">{c.name}</span>
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground font-mono">{c.type}</span>
+                          {!c.enabled && <span className="text-xs text-muted-foreground">disabled</span>}
+                        </div>
+                        {c.jira_url && (
+                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{c.jira_url}</p>
+                        )}
                       </div>
-                      {c.jira_url && (
-                        <p className="text-xs text-muted-foreground mt-0.5 truncate">{c.jira_url}</p>
-                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button size="icon" variant="ghost" className="h-8 w-8"
+                        onClick={() => { setEditing(c); setDialogOpen(true); }}>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        disabled={deleting === c.id}
+                        onClick={() => handleDelete(c.id)}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button size="icon" variant="ghost" className="h-8 w-8"
-                      onClick={() => { setEditing(c); setDialogOpen(true); }}>
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      disabled={deleting === c.id}
-                      onClick={() => handleDelete(c.id)}>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                </div>
 
-                <div className="mt-3 pt-3 border-t border-border">
-                  <CopyField
-                    label="Webhook URL — paste this into your Jira webhook configuration"
-                    value={`${API_URL}/api/connectors/${c.id}/webhook`}
-                  />
-                  <div className="mt-2 space-y-1.5 text-xs text-muted-foreground">
-                    <p>
-                      <strong className="text-foreground">In Jira:</strong>{' '}
-                      <strong>Settings → System → Webhooks → Create webhook.</strong>
-                    </p>
-                    <ol className="list-decimal list-inside space-y-1 pl-1">
-                      <li>Set the <strong>URL</strong> to the webhook URL above.</li>
-                      <li>Under <strong>Events</strong>, check <em>Issue Created</em> and <em>Issue Updated</em>.</li>
-                      <li>
-                        In the <strong>JQL</strong> field, enter a filter to limit which issues trigger this webhook —
-                        for example{' '}
-                        <code className="font-mono bg-secondary px-1 rounded">project = OPS AND issuetype in (Change, Deployment)</code>.
-                        Only issues matching this query will be sent to OpsLedger.
-                      </li>
-                      <li>
-                        Add a custom request header{' '}
-                        <code className="font-mono bg-secondary px-1 rounded">X-Connector-Secret</code>{' '}
-                        with the secret value shown when the connector was created.
-                      </li>
-                    </ol>
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <CopyField
+                      label="Webhook URL"
+                      value={`${API_URL}/api/connectors/${c.id}/webhook`}
+                    />
                   </div>
                 </div>
+              ))}
+            </div>
+
+            <div className="rounded-md border border-border bg-card p-4 space-y-3">
+              <p className="text-xs font-medium text-foreground">
+                Jira webhook setup{' '}
+                <span className="font-normal text-muted-foreground">— Settings → System → Webhooks → Create webhook</span>
+              </p>
+              <div className="space-y-2">
+                {[
+                  {
+                    step: '1',
+                    label: 'URL',
+                    body: 'Paste the webhook URL from the connector above.',
+                  },
+                  {
+                    step: '2',
+                    label: 'Events',
+                    body: <><em>Issue Created</em> and <em>Issue Updated</em>.</>,
+                  },
+                  {
+                    step: '3',
+                    label: 'JQL filter',
+                    body: (
+                      <>
+                        Limit which issues trigger this webhook. Example:{' '}
+                        <code className="font-mono bg-secondary px-1 rounded text-foreground">
+                          project = OPS AND issuetype in (Change, Deployment)
+                        </code>
+                      </>
+                    ),
+                  },
+                  {
+                    step: '4',
+                    label: 'Secret header',
+                    body: (
+                      <>
+                        Add a custom request header{' '}
+                        <code className="font-mono bg-secondary px-1 rounded text-foreground">X-Connector-Secret</code>{' '}
+                        with the secret generated when the connector was created.
+                      </>
+                    ),
+                  },
+                ].map(({ step, label, body }) => (
+                  <div key={step} className="flex gap-2.5 text-xs text-muted-foreground">
+                    <span className="shrink-0 w-4 h-4 rounded-full bg-secondary text-foreground font-medium text-[10px] flex items-center justify-center mt-0.5">
+                      {step}
+                    </span>
+                    <span>
+                      <strong className="text-foreground">{label} — </strong>
+                      {body}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
           </div>
         )}
       </div>

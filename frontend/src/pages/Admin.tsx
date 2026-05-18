@@ -9,7 +9,7 @@ import AuditTab from '@/components/admin/AuditTab';
 const Admin = () => {
   return (
     <Layout>
-      <div className="max-w-5xl mx-auto">
+      <div>
         {/* Header */}
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-1">

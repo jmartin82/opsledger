@@ -74,7 +74,7 @@ const CalendarPage = () => {
 
   return (
     <Layout>
-      <div className="max-w-5xl mx-auto">
+      <div>
         {/* Header */}
         <div className="flex items-center gap-2 mb-6">
           <CalendarDays className="w-4 h-4 text-primary" />

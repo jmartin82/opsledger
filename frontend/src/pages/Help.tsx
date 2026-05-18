@@ -212,6 +212,52 @@ const Help = () => {
               </div>
             </Section>
 
+            {/* CONFIRM */}
+            <Section title="POST /changes/:id/confirm — Confirm a Scheduled Change">
+              <p className="text-sm text-muted-foreground">
+                Mark a previously scheduled change as executed. Returns <code className="font-mono text-xs bg-secondary px-1.5 py-0.5 rounded text-foreground">409 Conflict</code> if the change is already executed.
+              </p>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Request</p>
+                <CodeBlock language="bash" code={`curl -X POST ${baseUrl}/changes/550e8400-e29b-41d4-a716-446655440000/confirm \\
+  -H "Authorization: Bearer ${apiKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "timestamp": "2025-02-19T16:00:00Z"
+  }'`} />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Fields</p>
+                <div className="bg-card border border-border rounded-lg overflow-hidden">
+                  {[
+                    { field: 'timestamp', type: 'ISO 8601 string', req: false, desc: 'Actual execution time. Defaults to server time if omitted.' },
+                  ].map(({ field, type, req, desc }, i) => (
+                    <div key={field} className={cn('flex gap-3 px-4 py-2.5 text-sm', i > 0 && 'border-t border-border')}>
+                      <span className="font-mono text-infra w-28 shrink-0">{field}</span>
+                      <span className="font-mono text-xs text-muted-foreground w-48 shrink-0 mt-0.5">{type}</span>
+                      <span className={cn('text-xs font-medium w-12 shrink-0 mt-0.5', req ? 'text-destructive' : 'text-muted-foreground')}>
+                        {req ? 'required' : 'optional'}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Response (200 OK)</p>
+                <CodeBlock language="json" code={`{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "system": "api-gateway",
+  "environment": "production",
+  "user": "diana.kim",
+  "type": "deployment",
+  "description": "Upgrade PostgreSQL from 14 to 16",
+  "timestamp": "2025-02-19T16:00:00.000Z",
+  "status": "executed"
+}`} />
+              </div>
+            </Section>
+
             {/* GET */}
             <Section title="GET /changes — Query the Change Log">
               <p className="text-sm text-muted-foreground">
@@ -230,6 +276,7 @@ const Help = () => {
                     { param: 'environment', desc: 'Filter by environment (production, staging, ...)' },
                     { param: 'user', desc: 'Filter by user who made the change' },
                     { param: 'type', desc: 'infrastructure | deployment | configuration' },
+                    { param: 'status', desc: 'executed | scheduled | overdue' },
                     { param: 'timeRange', desc: '30m, 1h, 2h, 6h, 24h, 7d — relative to now' },
                     { param: 'from', desc: 'ISO 8601 start timestamp (for custom range)' },
                     { param: 'to', desc: 'ISO 8601 end timestamp (for custom range)' },
@@ -255,6 +302,7 @@ const Help = () => {
                 {[
                   { title: 'list_changes', desc: 'Query change log with filters' },
                   { title: 'register_change', desc: 'Log a completed infrastructure, deployment, or config change' },
+                  { title: 'confirm_change', desc: 'Mark a scheduled change as executed after completing it' },
                   { title: 'update_change', desc: 'Update an existing change record' },
                   { title: 'delete_change', desc: 'Delete a change record' },
                 ].map(({ title, desc }) => (
@@ -306,6 +354,30 @@ const Help = () => {
     }
   ],
   "total": 1
+}`} />
+            </Section>
+
+            {/* Example confirm */}
+            <Section title="Example Tool Call — confirm_change">
+              <CodeBlock language="json" code={`// Tool call from AI agent (after completing a scheduled change)
+{
+  "tool": "confirm_change",
+  "parameters": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "timestamp": "2025-02-19T16:00:00Z"
+  }
+}
+
+// Response
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "system": "api-gateway",
+  "environment": "production",
+  "type": "deployment",
+  "description": "Upgrade PostgreSQL from 14 to 16",
+  "user": "diana.kim",
+  "timestamp": "2025-02-19T16:00:00.000Z",
+  "status": "executed"
 }`} />
             </Section>
 

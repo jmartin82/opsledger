@@ -20,7 +20,7 @@ const CalendarPage = () => {
   const [scheduled, setScheduled] = useState<Change[]>([]);
   const [overdue, setOverdue] = useState<Change[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [selectedDay, setSelectedDay] = useState<Date | null>(new Date());
   const [confirming, setConfirming] = useState<string | null>(null);
 
   const fetchScheduled = useCallback(async (m: Date) => {

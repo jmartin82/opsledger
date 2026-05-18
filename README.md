@@ -41,9 +41,15 @@ OpsLedger provides a single source of truth for all changes made to your infrast
 - **Key Rotation** - Easily rotate and revoke API keys
 - **Usage Tracking** - Monitor when keys were last used
 
+### Connectors
+- **Jira Integration** - Connect OpsLedger to Jira via webhook. Incoming Jira issue events are automatically converted into change log entries using a configurable type mapping and environment label prefix
+- **Webhook Security** - Each connector is issued a unique secret; all incoming webhook payloads are verified with HMAC-SHA256 before processing
+- **Connector Management** - Admins can create, enable/disable, edit, and delete connectors from the dedicated Connectors page (`/connectors`)
+
 ### Admin Panel
 - User management (create, edit, delete users)
 - API key lifecycle management
+- Connector management (Jira webhooks)
 - Audit log for security tracking
 
 ### Real-time Updates
@@ -197,6 +203,31 @@ Returns `409 Conflict` if the change is already executed.
 | POST | `/api/admin/api-keys` | Create a new API key |
 | POST | `/api/admin/api-keys/:id/revoke` | Revoke an API key |
 | POST | `/api/admin/api-keys/:id/rotate` | Rotate an API key |
+
+### Connectors API (admin only)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/connectors` | List all connectors |
+| POST | `/api/admin/connectors` | Create a new Jira connector |
+| PUT | `/api/admin/connectors/:id` | Update a connector |
+| DELETE | `/api/admin/connectors/:id` | Delete a connector |
+| POST | `/api/connectors/:id/webhook` | Jira webhook receiver (no auth — HMAC-verified) |
+
+**Creating a Jira connector:**
+```json
+POST /api/admin/connectors
+{
+  "name": "My Jira",
+  "jira_url": "https://myorg.atlassian.net",
+  "api_token": "your_jira_api_token",
+  "mapping": {
+    "type_map": { "Change": "configuration", "Deployment": "deployment", "Infrastructure": "infrastructure" },
+    "environment_label_prefix": "env:"
+  }
+}
+```
+The response includes the `secret` to use as the HMAC key when configuring the Jira webhook. Point your Jira automation webhook at `POST /api/connectors/:id/webhook`.
 
 ### Authentication
 

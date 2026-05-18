@@ -39,6 +39,8 @@ export const handlers = [
     const body = await request.json() as Record<string, unknown>;
     return HttpResponse.json({
       id: '99',
+      status: 'executed',
+      created_at: new Date().toISOString(),
       ...body,
       timestamp: body.timestamp || new Date().toISOString(),
     }, { status: 201 });
@@ -48,7 +50,17 @@ export const handlers = [
     const body = await request.json() as Record<string, unknown>;
     return HttpResponse.json({
       id: params.id,
+      status: 'executed',
+      created_at: new Date().toISOString(),
       ...body,
+    });
+  }),
+
+  http.patch(`${API_URL}/api/changes/:id/confirm`, ({ params }) => {
+    return HttpResponse.json({
+      ...mockChange({ id: params.id as string }),
+      status: 'executed',
+      timestamp: new Date().toISOString(),
     });
   }),
 

@@ -22,8 +22,11 @@ OpsLedger provides a single source of truth for all changes made to your infrast
 
 ### Change Management
 - **Register Changes** - Log infrastructure, deployment, and configuration changes with rich metadata including system, environment, change type, and detailed descriptions
-- **Real-time Filtering** - Filter changes by system, environment, user, change type, and time range
+- **Scheduled Changes** - Pre-register planned changes before they happen. Scheduled changes appear in the change log and on a dedicated calendar view. Past-due scheduled changes are flagged as **overdue** and require explicit confirmation to close out
+- **Confirm Changes** - Mark a scheduled change as executed (via the change log, calendar, or API), optionally overriding the execution timestamp
+- **Real-time Filtering** - Filter changes by system, environment, user, change type, status (executed / scheduled / overdue), and time range
 - **Search & Autocomplete** - Quickly find changes with full-text search and intelligent autocomplete for systems, environments, and users
+- **Calendar View** - Visual month grid at `/calendar` showing upcoming scheduled changes with overdue highlighting and day-level detail
 
 ### Authentication & Authorization
 - **Role-Based Access Control** - Three roles with distinct permissions:
@@ -66,7 +69,7 @@ Teams can see what changes others are making, reducing duplicate work and improv
 
 ### Agent vs Human Change Tracking
 Track changes made by different sources to understand automation impact:
-- **MCP Agents** - Log changes from AI agents and automation tools (e.g., Claude Code, custom MCP servers)
+- **MCP Agents** - Log changes from AI agents and automation tools (e.g., Claude Code, custom MCP servers). Available MCP tools: `register_change`, `confirm_change`, `update_change`, `list_changes`, `delete_change`
 - **REST API** - Track changes made via direct API calls from external systems
 - **UI Changes** - Record changes made by humans through the web interface
 
@@ -152,13 +155,39 @@ VITE_API_URL=http://localhost:8081/api
 |--------|----------|-------------|
 | GET | `/api/changes` | List changes (supports filtering) |
 | POST | `/api/changes` | Create a new change |
+| PUT | `/api/changes/:id` | Update an existing change |
+| DELETE | `/api/changes/:id` | Delete a change |
+| PATCH | `/api/changes/:id/confirm` | Confirm a scheduled change as executed |
 
 **Supported Filters:**
 - `system` - Filter by system name
 - `environment` - Filter by environment (prod, staging, dev, etc.)
-- `type` - Filter by change type (infrastructure, deployment, configuration)
-- `user_id` - Filter by user
-- `from` / `to` - Date range filtering
+- `type` - Filter by change type (`infrastructure`, `deployment`, `configuration`)
+- `status` - Filter by status (`executed`, `scheduled`, `overdue`)
+- `user` - Filter by user
+- `from` / `to` - Date range filtering (ISO 8601)
+- `search` - Full-text search across description and system
+
+**Creating a scheduled change:**
+```json
+POST /api/changes
+{
+  "system": "api-gateway",
+  "type": "deployment",
+  "description": "Upgrade to v3.0",
+  "status": "scheduled",
+  "timestamp": "2026-06-15T10:00:00Z"
+}
+```
+When `status` is `"scheduled"`, `timestamp` is required and must be in the future.
+When `status` is `"executed"` (default), `timestamp` is optional and defaults to now.
+
+**Confirming a scheduled change:**
+```json
+PATCH /api/changes/:id/confirm
+{ "timestamp": "2026-06-15T10:05:00Z" }   // optional — defaults to now
+```
+Returns `409 Conflict` if the change is already executed.
 
 ### Admin API Keys
 

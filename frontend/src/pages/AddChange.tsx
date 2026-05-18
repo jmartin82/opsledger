@@ -7,9 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import AutocompleteInput from '@/components/AutocompleteInput';
-import { Plus, CheckCircle, Server, Rocket, Settings } from 'lucide-react';
+import { Plus, CheckCircle, CalendarClock, Server, Rocket, Settings, Clock, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
+import { format, parseISO } from 'date-fns';
+
+type ChangeMode = 'executed' | 'scheduled';
 
 type ChangeTypeOption = { value: ChangeType; label: string; description: string; icon: React.ComponentType<{ className?: string }>; badge: string };
 
@@ -27,6 +30,7 @@ const toLocalDatetime = (d: Date) => {
 const AddChange = () => {
   const navigate = useNavigate();
   const [submitted, setSubmitted] = useState(false);
+  const [mode, setMode] = useState<ChangeMode>('executed');
 
   const [form, setForm] = useState({
     system: '',
@@ -34,12 +38,20 @@ const AddChange = () => {
     user: '',
     type: '' as ChangeType | '',
     description: '',
-    timestamp: toLocalDatetime(new Date()),
+    executedAt: toLocalDatetime(new Date()),
+    scheduledAt: '',
   });
 
-  const [errors, setErrors] = useState<{ system?: string; type?: string; description?: string; environment?: string; user?: string }>({});
+  const [errors, setErrors] = useState<{
+    system?: string;
+    type?: string;
+    description?: string;
+    timestamp?: string;
+  }>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submittedSystem, setSubmittedSystem] = useState('');
+  const [submittedTimestamp, setSubmittedTimestamp] = useState('');
 
   const envRef = useRef<HTMLInputElement>(null);
   const userRef = useRef<HTMLInputElement>(null);
@@ -47,14 +59,25 @@ const AddChange = () => {
 
   const set = (k: keyof typeof form, v: string) => {
     setForm(f => ({ ...f, [k]: v }));
-    if (errors[k]) setErrors(e => ({ ...e, [k]: '' }));
+    if (k === 'executedAt' || k === 'scheduledAt') {
+      setErrors(e => ({ ...e, timestamp: '' }));
+    } else if (errors[k as keyof typeof errors]) {
+      setErrors(e => ({ ...e, [k]: '' }));
+    }
   };
 
   const validate = () => {
-    const e: { system?: string; type?: string; description?: string } = {};
+    const e: typeof errors = {};
     if (!form.system.trim()) e.system = 'System is required';
     if (!form.type) e.type = 'Change type is required';
     if (!form.description.trim()) e.description = 'Description is required';
+    if (mode === 'scheduled') {
+      if (!form.scheduledAt) {
+        e.timestamp = 'Scheduled date is required';
+      } else if (new Date(form.scheduledAt) <= new Date()) {
+        e.timestamp = 'Scheduled date must be in the future';
+      }
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -65,14 +88,21 @@ const AddChange = () => {
     setSubmitting(true);
     setSubmitError(null);
     try {
+      const timestamp = mode === 'executed'
+        ? (form.executedAt ? new Date(form.executedAt).toISOString() : undefined)
+        : new Date(form.scheduledAt).toISOString();
+
       await api.post('/api/changes', {
         system: form.system.trim(),
         environment: form.environment.trim() || null,
         user: form.user.trim() || null,
         type: form.type,
         description: form.description.trim(),
-        timestamp: form.timestamp ? new Date(form.timestamp).toISOString() : undefined,
+        status: mode,
+        timestamp,
       });
+      setSubmittedSystem(form.system.trim());
+      setSubmittedTimestamp(timestamp ?? '');
       setSubmitted(true);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to register change');
@@ -81,7 +111,40 @@ const AddChange = () => {
     }
   };
 
+  const resetForm = () => {
+    setForm({ system: '', environment: '', user: '', type: '', description: '', executedAt: toLocalDatetime(new Date()), scheduledAt: '' });
+    setMode('executed');
+    setSubmitted(false);
+    setErrors({});
+    setSubmitError(null);
+  };
+
   if (submitted) {
+    if (mode === 'scheduled') {
+      return (
+        <Layout>
+          <div className="max-w-lg mx-auto text-center py-20">
+            <div className="w-14 h-14 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mx-auto mb-4">
+              <CalendarClock className="w-7 h-7 text-blue-500" />
+            </div>
+            <h2 className="text-lg font-semibold text-foreground mb-2">Change Scheduled</h2>
+            <p className="text-sm text-muted-foreground mb-1">
+              The planned change for <span className="font-mono text-foreground">{submittedSystem}</span> has been registered.
+            </p>
+            {submittedTimestamp && (
+              <p className="text-sm text-muted-foreground mb-6">
+                Scheduled for <span className="font-semibold text-foreground">{format(parseISO(submittedTimestamp), 'PPpp')}</span>
+              </p>
+            )}
+            <div className="flex gap-3 justify-center">
+              <Button variant="outline" onClick={resetForm}>Schedule Another</Button>
+              <Button onClick={() => navigate('/calendar')}>View Calendar</Button>
+            </div>
+          </div>
+        </Layout>
+      );
+    }
+
     return (
       <Layout>
         <div className="max-w-lg mx-auto text-center py-20">
@@ -90,12 +153,10 @@ const AddChange = () => {
           </div>
           <h2 className="text-lg font-semibold text-foreground mb-2">Change Registered</h2>
           <p className="text-sm text-muted-foreground mb-6">
-            The change for <span className="font-mono text-foreground">{form.system}</span> has been logged successfully.
+            The change for <span className="font-mono text-foreground">{submittedSystem}</span> has been logged successfully.
           </p>
           <div className="flex gap-3 justify-center">
-            <Button variant="outline" onClick={() => { setForm({ system: '', environment: '', user: '', type: '', description: '', timestamp: toLocalDatetime(new Date()) }); setSubmitted(false); }}>
-              Register Another
-            </Button>
+            <Button variant="outline" onClick={resetForm}>Register Another</Button>
             <Button onClick={() => navigate('/')}>View Change Log</Button>
           </div>
         </div>
@@ -192,17 +253,60 @@ const AddChange = () => {
             />
           </div>
 
-          {/* Timestamp */}
-          <div className="space-y-1.5">
+          {/* When — mode toggle + conditional datetime */}
+          <div className="space-y-2">
             <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Timestamp
+              When
             </Label>
-            <Input
-              type="datetime-local"
-              value={form.timestamp}
-              onChange={e => set('timestamp', e.target.value)}
-              className="bg-card border-border text-sm w-64"
-            />
+
+            {/* Mode toggle */}
+            <div className="flex rounded-lg border border-border bg-card p-0.5 w-fit gap-0.5">
+              <button
+                type="button"
+                onClick={() => setMode('executed')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all',
+                  mode === 'executed'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                Already happened
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('scheduled')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all',
+                  mode === 'scheduled'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                Schedule for later
+              </button>
+            </div>
+
+            {/* Datetime input */}
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground">
+                {mode === 'executed' ? 'When did it happen?' : 'Schedule for'}
+                {mode === 'scheduled' && <span className="text-destructive ml-1">*</span>}
+              </span>
+              <Input
+                type="datetime-local"
+                value={mode === 'executed' ? form.executedAt : form.scheduledAt}
+                onChange={e => set(mode === 'executed' ? 'executedAt' : 'scheduledAt', e.target.value)}
+                min={mode === 'scheduled' ? toLocalDatetime(new Date()) : undefined}
+                className="bg-card border-border text-sm w-64"
+              />
+              {mode === 'scheduled' && (
+                <p className="text-xs text-muted-foreground">Must be a future date and time.</p>
+              )}
+              {errors.timestamp && <p className="text-xs text-destructive">{errors.timestamp}</p>}
+            </div>
           </div>
 
           {/* Description */}
@@ -224,18 +328,17 @@ const AddChange = () => {
           {/* Actions */}
           <div className="flex items-center justify-between pt-2 border-t border-border">
             <div>
-              <p className="text-xs text-muted-foreground">
-                Timestamp defaults to now. Adjust above if needed.
-              </p>
-              {submitError && <p className="text-xs text-destructive mt-1">{submitError}</p>}
+              {submitError && <p className="text-xs text-destructive">{submitError}</p>}
             </div>
             <div className="flex gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => navigate('/')}>
                 Cancel
               </Button>
               <Button type="submit" size="sm" className="gap-1.5" disabled={submitting}>
-                <Plus className="w-3.5 h-3.5" />
-                {submitting ? 'Registering...' : 'Register Change'}
+                {mode === 'scheduled'
+                  ? <><Calendar className="w-3.5 h-3.5" />{submitting ? 'Scheduling...' : 'Schedule Change'}</>
+                  : <><Plus className="w-3.5 h-3.5" />{submitting ? 'Registering...' : 'Register Change'}</>
+                }
               </Button>
             </div>
           </div>

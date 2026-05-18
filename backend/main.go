@@ -80,6 +80,7 @@ func main() {
 	changesGroup.GET("", changes.List)
 	changesGroup.PUT("/:id", changes.Update)
 	changesGroup.DELETE("/:id", changes.Delete)
+	changesGroup.PATCH("/:id/confirm", changes.Confirm)
 
 	// SSE live events endpoint
 	eventHandler := &handlers.EventHandler{Hub: hub}

@@ -12,6 +12,7 @@ import Help from "./pages/Help";
 import Admin from "./pages/Admin";
 import Account from "./pages/Account";
 import Login from "./pages/Login";
+import CalendarPage from "./pages/Calendar";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
 
             {/* Protected — any authenticated user */}
             <Route path="/" element={<RequireAuth><Index /></RequireAuth>} />
+            <Route path="/calendar" element={<RequireAuth><CalendarPage /></RequireAuth>} />
             <Route path="/help" element={<RequireAuth><Help /></RequireAuth>} />
             <Route path="/account" element={<RequireAuth><Account /></RequireAuth>} />
 

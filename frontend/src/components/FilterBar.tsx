@@ -47,7 +47,7 @@ const FilterBar = ({ filters, onChange, totalCount, filteredCount }: FilterBarPr
   };
 
   const clear = () => {
-    onChange({ system: '', environment: '', user: '', type: '', timeRange: '', search: '', customFrom: '', customTo: '' });
+    onChange({ system: '', environment: '', user: '', type: '', status: '', timeRange: '', search: '', customFrom: '', customTo: '' });
   };
 
   return (
@@ -118,6 +118,18 @@ const FilterBar = ({ filters, onChange, totalCount, filteredCount }: FilterBarPr
             />
           </div>
         )}
+
+        <Select value={filters.status || 'all'} onValueChange={(v) => update('status', v)}>
+          <SelectTrigger className="w-36 h-8 text-xs bg-card border-border">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="executed">Executed</SelectItem>
+            <SelectItem value="scheduled">Scheduled</SelectItem>
+            <SelectItem value="overdue">Overdue</SelectItem>
+          </SelectContent>
+        </Select>
 
         <Select value={filters.type || 'all'} onValueChange={(v) => update('type', v)}>
           <SelectTrigger className="w-36 h-8 text-xs bg-card border-border">

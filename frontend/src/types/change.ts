@@ -1,5 +1,6 @@
 export type ChangeType = 'infrastructure' | 'deployment' | 'configuration';
 export type Environment = 'production' | 'staging' | 'preprod' | 'development' | string;
+export type ChangeStatus = 'executed' | 'scheduled';
 
 export interface Change {
   id: string;
@@ -8,7 +9,9 @@ export interface Change {
   user?: string;
   type: ChangeType;
   description: string;
-  timestamp: string; // ISO 8601
+  status: ChangeStatus;
+  timestamp: string;   // ISO 8601 — event_at (execution or scheduled time)
+  created_at: string;  // ISO 8601 — record insert time
 }
 
 export interface ChangeFilters {
@@ -16,6 +19,7 @@ export interface ChangeFilters {
   environment?: string;
   user?: string;
   type?: ChangeType | '';
+  status?: ChangeStatus | 'overdue' | '';
   timeRange?: '30m' | '1h' | '2h' | '6h' | '24h' | '7d' | 'custom' | '';
   customFrom?: string; // ISO datetime-local string
   customTo?: string;   // ISO datetime-local string

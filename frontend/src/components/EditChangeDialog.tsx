@@ -7,16 +7,23 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import AutocompleteInput from '@/components/AutocompleteInput';
-import { Server, Rocket, Settings } from 'lucide-react';
+import { Server, Rocket, Settings, Clock, Calendar, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 type ChangeTypeOption = { value: ChangeType; label: string; description: string; icon: React.ComponentType<{ className?: string }>; badge: string };
+type ChangeMode = 'executed' | 'scheduled';
 
 const TYPES: ChangeTypeOption[] = [
   { value: 'infrastructure', label: 'Infrastructure', description: 'Network, servers, cloud resources', icon: Server, badge: 'badge-infra' },
   { value: 'deployment', label: 'Deployment', description: 'Code releases, service updates', icon: Rocket, badge: 'badge-deploy' },
   { value: 'configuration', label: 'Configuration', description: 'Config files, feature flags, secrets', icon: Settings, badge: 'badge-config' },
 ];
+
+const toLocalDatetime = (isoStr: string) => {
+  if (!isoStr) return '';
+  return new Date(isoStr).toISOString().slice(0, 16);
+};
 
 interface EditChangeDialogProps {
   change: Change | null;
@@ -26,6 +33,8 @@ interface EditChangeDialogProps {
 }
 
 const EditChangeDialog = ({ change, open, onOpenChange, onSaved }: EditChangeDialogProps) => {
+  const { toast } = useToast();
+  const [mode, setMode] = useState<ChangeMode>('executed');
   const [form, setForm] = useState({
     system: '',
     environment: '',
@@ -34,9 +43,10 @@ const EditChangeDialog = ({ change, open, onOpenChange, onSaved }: EditChangeDia
     description: '',
     timestamp: '',
   });
-  const [errors, setErrors] = useState<{ system?: string; type?: string; description?: string }>({});
+  const [errors, setErrors] = useState<{ system?: string; type?: string; description?: string; timestamp?: string }>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const envRef = useRef<HTMLInputElement>(null);
   const userRef = useRef<HTMLInputElement>(null);
@@ -44,17 +54,14 @@ const EditChangeDialog = ({ change, open, onOpenChange, onSaved }: EditChangeDia
 
   useEffect(() => {
     if (change) {
-      // Convert ISO timestamp to datetime-local format (YYYY-MM-DDTHH:MM)
-      const tsLocal = change.timestamp
-        ? new Date(change.timestamp).toISOString().slice(0, 16)
-        : '';
+      setMode((change.status as ChangeMode) || 'executed');
       setForm({
         system: change.system,
         environment: change.environment || '',
         user: change.user || '',
         type: change.type,
         description: change.description,
-        timestamp: tsLocal,
+        timestamp: toLocalDatetime(change.timestamp),
       });
       setErrors({});
       setSubmitError(null);
@@ -67,10 +74,11 @@ const EditChangeDialog = ({ change, open, onOpenChange, onSaved }: EditChangeDia
   };
 
   const validate = () => {
-    const e: { system?: string; type?: string; description?: string } = {};
+    const e: typeof errors = {};
     if (!form.system.trim()) e.system = 'System is required';
     if (!form.type) e.type = 'Change type is required';
     if (!form.description.trim()) e.description = 'Description is required';
+    if (mode === 'scheduled' && !form.timestamp) e.timestamp = 'Scheduled date is required';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -87,6 +95,7 @@ const EditChangeDialog = ({ change, open, onOpenChange, onSaved }: EditChangeDia
         user: form.user.trim() || null,
         type: form.type,
         description: form.description.trim(),
+        status: mode,
         timestamp: form.timestamp ? new Date(form.timestamp).toISOString() : undefined,
       });
       onOpenChange(false);
@@ -97,6 +106,24 @@ const EditChangeDialog = ({ change, open, onOpenChange, onSaved }: EditChangeDia
       setSubmitting(false);
     }
   };
+
+  const handleConfirm = async () => {
+    if (!change) return;
+    setConfirming(true);
+    try {
+      await api.patch(`/api/changes/${change.id}/confirm`, {});
+      toast({ title: 'Change confirmed', description: `${change.system} marked as executed` });
+      onOpenChange(false);
+      onSaved();
+    } catch (err) {
+      toast({ title: 'Failed to confirm change', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const isScheduled = change?.status === 'scheduled';
+  const isOverdue = isScheduled && change?.timestamp ? new Date(change.timestamp) < new Date() : false;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -172,15 +199,49 @@ const EditChangeDialog = ({ change, open, onOpenChange, onSaved }: EditChangeDia
             />
           </div>
 
-          {/* Timestamp */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Timestamp</Label>
-            <Input
-              type="datetime-local"
-              value={form.timestamp}
-              onChange={e => set('timestamp', e.target.value)}
-              className="bg-card border-border text-sm w-64"
-            />
+          {/* When — mode toggle */}
+          <div className="space-y-2">
+            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">When</Label>
+            <div className="flex rounded-lg border border-border bg-card p-0.5 w-fit gap-0.5">
+              <button
+                type="button"
+                onClick={() => setMode('executed')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all',
+                  mode === 'executed'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                Already happened
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('scheduled')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all',
+                  mode === 'scheduled'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                Schedule for later
+              </button>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground">
+                {mode === 'executed' ? 'When did it happen?' : 'Scheduled for'}
+              </span>
+              <Input
+                type="datetime-local"
+                value={form.timestamp}
+                onChange={e => set('timestamp', e.target.value)}
+                className="bg-card border-border text-sm w-64"
+              />
+              {errors.timestamp && <p className="text-xs text-destructive">{errors.timestamp}</p>}
+            </div>
           </div>
 
           {/* Description */}
@@ -201,13 +262,31 @@ const EditChangeDialog = ({ change, open, onOpenChange, onSaved }: EditChangeDia
 
           {submitError && <p className="text-xs text-destructive">{submitError}</p>}
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" size="sm" disabled={submitting}>
-              {submitting ? 'Saving...' : 'Save Changes'}
-            </Button>
+          <div className="flex justify-between gap-2 pt-2">
+            {/* Confirm button — only for scheduled changes */}
+            <div>
+              {isScheduled && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleConfirm}
+                  disabled={confirming}
+                  className={cn('gap-1.5', isOverdue && 'border-amber-500/50 text-amber-600 hover:bg-amber-500/10')}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  {confirming ? 'Confirming...' : 'Mark as Done'}
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={submitting}>
+                {submitting ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
           </div>
         </form>
       </DialogContent>

@@ -25,6 +25,7 @@ function buildQueryString(filters: ChangeFilters): string {
   if (filters.environment) params.set('environment', filters.environment);
   if (filters.user) params.set('user', filters.user);
   if (filters.type) params.set('type', filters.type);
+  if (filters.status) params.set('status', filters.status);
   if (filters.search) params.set('search', filters.search);
 
   if (filters.timeRange === 'custom') {
@@ -43,6 +44,12 @@ function passesFilters(change: Change, filters: ChangeFilters): boolean {
   if (filters.system && change.system !== filters.system) return false;
   if (filters.environment && change.environment !== filters.environment) return false;
   if (filters.type && change.type !== filters.type) return false;
+  if (filters.status) {
+    const isOverdue = change.status === 'scheduled' && new Date(change.timestamp) < new Date();
+    if (filters.status === 'overdue' && !isOverdue) return false;
+    if (filters.status === 'executed' && change.status !== 'executed') return false;
+    if (filters.status === 'scheduled' && change.status !== 'scheduled') return false;
+  }
   // Time-range always passes for new arrivals — they were just created
   return true;
 }
@@ -178,6 +185,7 @@ const Index = () => {
               change={change}
               onEdit={setEditingChange}
               onDelete={setDeletingChange}
+              onConfirm={(confirmed) => setChanges(prev => prev.map(c => c.id === confirmed.id ? confirmed : c))}
             />
           ))
         )}

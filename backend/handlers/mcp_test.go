@@ -139,14 +139,15 @@ func TestMCPHandle_ToolsList(t *testing.T) {
 	}
 
 	tools, _ := result["tools"].([]interface{})
-	if len(tools) != 4 {
-		t.Fatalf("expected 4 tools, got %d", len(tools))
+	if len(tools) != 5 {
+		t.Fatalf("expected 5 tools, got %d", len(tools))
 	}
 
 	wantNames := map[string]bool{
 		"register_change": true,
 		"update_change":   true,
 		"delete_change":   true,
+		"confirm_change":  true,
 		"list_changes":    true,
 	}
 	for _, tool := range tools {
@@ -221,14 +222,13 @@ func TestMCPCreateChange_Success(t *testing.T) {
 	now := time.Now()
 	// UUID is generated at runtime — use AnyArg() for first arg
 	mock.ExpectExec("INSERT INTO changes").
-		WithArgs(sqlmock.AnyArg(), "api-service", nil, nil, "deployment", "Deployed v2.0").
+		WithArgs(sqlmock.AnyArg(), "api-service", nil, nil, "deployment", "Deployed v2.0", "executed").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
 		WithArgs(sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "system", "environment", "user", "type", "description", "created_at",
-		}).AddRow(testUUID, "api-service", nil, nil, "deployment", "Deployed v2.0", now))
+		WillReturnRows(addChangeRow(sqlmock.NewRows(changeColumns),
+			testUUID, "api-service", nil, nil, "deployment", "Deployed v2.0", "executed", now, now))
 
 	mock.ExpectExec("INSERT INTO audit_log").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
@@ -333,16 +333,15 @@ func TestMCPCreateChange_WithTimestamp(t *testing.T) {
 	h := &MCPHandler{DB: db, Hub: nil}
 
 	now := time.Now()
-	// With timestamp, INSERT has 7 args (id + 5 fields + created_at)
+	// With timestamp, INSERT has 8 args (id + 5 fields + status + event_at)
 	mock.ExpectExec("INSERT INTO changes").
-		WithArgs(sqlmock.AnyArg(), "api-service", nil, nil, "deployment", "Deployed v2.0", sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), "api-service", nil, nil, "deployment", "Deployed v2.0", "executed", sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
 		WithArgs(sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "system", "environment", "user", "type", "description", "created_at",
-		}).AddRow(testUUID, "api-service", nil, nil, "deployment", "Deployed v2.0", now))
+		WillReturnRows(addChangeRow(sqlmock.NewRows(changeColumns),
+			testUUID, "api-service", nil, nil, "deployment", "Deployed v2.0", "executed", now, now))
 
 	mock.ExpectExec("INSERT INTO audit_log").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
@@ -402,16 +401,15 @@ func TestMCPUpdateChange_Success(t *testing.T) {
 	h := &MCPHandler{DB: db, Hub: nil}
 
 	now := time.Now()
-	// UPDATE without timestamp: 6 args (system, env, user, type, desc, id)
+	// UPDATE without timestamp: 7 args (system, env, user, type, desc, status, id)
 	mock.ExpectExec("UPDATE changes SET").
-		WithArgs("api-service", nil, nil, "infrastructure", "Updated desc", testUUID).
+		WithArgs("api-service", nil, nil, "infrastructure", "Updated desc", "executed", testUUID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
 		WithArgs(testUUID).
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "system", "environment", "user", "type", "description", "created_at",
-		}).AddRow(testUUID, "api-service", nil, nil, "infrastructure", "Updated desc", now))
+		WillReturnRows(addChangeRow(sqlmock.NewRows(changeColumns),
+			testUUID, "api-service", nil, nil, "infrastructure", "Updated desc", "executed", now, now))
 
 	mock.ExpectExec("INSERT INTO audit_log").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
@@ -512,9 +510,8 @@ func TestMCPDeleteChange_Success(t *testing.T) {
 	// Fetch for audit log
 	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
 		WithArgs(testUUID).
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "system", "environment", "user", "type", "description", "created_at",
-		}).AddRow(testUUID, "k8s-cluster", nil, nil, "infrastructure", "Updated ingress", now))
+		WillReturnRows(addChangeRow(sqlmock.NewRows(changeColumns),
+			testUUID, "k8s-cluster", nil, nil, "infrastructure", "Updated ingress", "executed", now, now))
 
 	mock.ExpectExec("DELETE FROM changes WHERE id").
 		WithArgs(testUUID).
@@ -584,9 +581,7 @@ func TestMCPDeleteChange_NotFound(t *testing.T) {
 	// GetChangeByID returns sql.ErrNoRows — handler should return "Change not found"
 	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
 		WithArgs(testUUID).
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "system", "environment", "user", "type", "description", "created_at",
-		})) // empty rows → sql.ErrNoRows on Scan
+		WillReturnRows(sqlmock.NewRows(changeColumns)) // empty rows → sql.ErrNoRows on Scan
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"delete_change","arguments":{"id":"` + testUUID + `"}}}`
 	c, rec := setupMCPContext(body)
@@ -624,11 +619,11 @@ func TestMCPListChanges_NoFilters(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
 
 	mock.ExpectQuery("SELECT .+ FROM changes").
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "system", "environment", "user", "type", "description", "created_at",
-		}).
-			AddRow(testUUID, "api-service", nil, nil, "deployment", "Deploy v1", now).
-			AddRow("661e8400-e29b-41d4-a716-446655440001", "db-primary", nil, nil, "infrastructure", "Scale up", now))
+		WillReturnRows(
+			addChangeRow(
+				addChangeRow(sqlmock.NewRows(changeColumns),
+					testUUID, "api-service", nil, nil, "deployment", "Deploy v1", "executed", now, now),
+				"661e8400-e29b-41d4-a716-446655440001", "db-primary", nil, nil, "infrastructure", "Scale up", "executed", now, now))
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_changes","arguments":{}}}`
 	c, rec := setupMCPContext(body)
@@ -675,9 +670,8 @@ func TestMCPListChanges_WithFilters(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 	mock.ExpectQuery("SELECT .+ FROM changes").
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "system", "environment", "user", "type", "description", "created_at",
-		}).AddRow(testUUID, "api-service", "prod", nil, "deployment", "Deploy v1", now))
+		WillReturnRows(addChangeRow(sqlmock.NewRows(changeColumns),
+			testUUID, "api-service", "prod", nil, "deployment", "Deploy v1", "executed", now, now))
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_changes","arguments":{"system":"api-service","environment":"prod","type":"deployment"}}}`
 	c, rec := setupMCPContext(body)
@@ -718,9 +712,7 @@ func TestMCPListChanges_LimitEnforcement(t *testing.T) {
 	mock.ExpectQuery("SELECT COUNT").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery("SELECT .+ FROM changes").
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "system", "environment", "user", "type", "description", "created_at",
-		}))
+		WillReturnRows(sqlmock.NewRows(changeColumns))
 
 	// Send limit:999 — should be capped at 200
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_changes","arguments":{"limit":999}}}`
@@ -760,9 +752,7 @@ func TestMCPListChanges_DefaultLimit(t *testing.T) {
 	mock.ExpectQuery("SELECT COUNT").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery("SELECT .+ FROM changes").
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "system", "environment", "user", "type", "description", "created_at",
-		}))
+		WillReturnRows(sqlmock.NewRows(changeColumns))
 
 	// No limit arg — should default to 50
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_changes","arguments":{}}}`
@@ -783,5 +773,220 @@ func TestMCPListChanges_DefaultLimit(t *testing.T) {
 	limit, _ := result["limit"].(float64)
 	if int(limit) != 50 {
 		t.Errorf("expected default limit 50, got %v", limit)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// confirm_change Tests
+// ---------------------------------------------------------------------------
+
+func TestMCPConfirmChange_Success(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	h := &MCPHandler{DB: db, Hub: nil}
+
+	future := time.Now().Add(24 * time.Hour)
+	now := time.Now()
+
+	// GetChangeByID — returns scheduled
+	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
+		WithArgs(testUUID).
+		WillReturnRows(addChangeRow(sqlmock.NewRows(changeColumns),
+			testUUID, "api", nil, nil, "deployment", "v2 deploy", "scheduled", future, now))
+
+	// UPDATE
+	mock.ExpectExec("UPDATE changes SET status='executed'").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	// GetChangeByID after confirm
+	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
+		WithArgs(testUUID).
+		WillReturnRows(addChangeRow(sqlmock.NewRows(changeColumns),
+			testUUID, "api", nil, nil, "deployment", "v2 deploy", "executed", now, now))
+
+	// Audit log
+	mock.ExpectExec("INSERT INTO audit_log").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"confirm_change","arguments":{"id":"` + testUUID + `"}}}`
+	c, rec := setupMCPContext(body)
+
+	if err := h.Handle(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	resp := decodeMCPResp(t, rec.Body.Bytes())
+	if resp.Error != nil {
+		t.Fatalf("unexpected RPC error: %+v", resp.Error)
+	}
+
+	var change map[string]interface{}
+	if err := json.Unmarshal(unwrapToolResult(t, resp.Result), &change); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if change["status"] != "executed" {
+		t.Errorf("expected status executed, got %v", change["status"])
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestMCPConfirmChange_MissingID(t *testing.T) {
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	h := &MCPHandler{DB: db, Hub: nil}
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"confirm_change","arguments":{}}}`
+	c, rec := setupMCPContext(body)
+
+	if err := h.Handle(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	resp := decodeMCPResp(t, rec.Body.Bytes())
+	if resp.Error != nil {
+		t.Fatalf("expected no RPC error, got: %+v", resp.Error)
+	}
+	assertToolError(t, resp.Result, "id is required")
+}
+
+func TestMCPConfirmChange_AlreadyExecuted(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	h := &MCPHandler{DB: db, Hub: nil}
+
+	now := time.Now()
+	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
+		WithArgs(testUUID).
+		WillReturnRows(addChangeRow(sqlmock.NewRows(changeColumns),
+			testUUID, "api", nil, nil, "deployment", "v2 deploy", "executed", now, now))
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"confirm_change","arguments":{"id":"` + testUUID + `"}}}`
+	c, rec := setupMCPContext(body)
+
+	if err := h.Handle(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	resp := decodeMCPResp(t, rec.Body.Bytes())
+	if resp.Error != nil {
+		t.Fatalf("expected no RPC error, got: %+v", resp.Error)
+	}
+	assertToolError(t, resp.Result, "already marked as executed")
+}
+
+// ---------------------------------------------------------------------------
+// register_change scheduled Tests
+// ---------------------------------------------------------------------------
+
+func TestMCPCreateChange_Scheduled(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	h := &MCPHandler{DB: db, Hub: nil}
+
+	future := time.Now().Add(48 * time.Hour)
+	now := time.Now()
+
+	mock.ExpectExec("INSERT INTO changes").
+		WithArgs(sqlmock.AnyArg(), "api", nil, nil, "deployment", "v3 deploy", "scheduled", sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	mock.ExpectQuery("SELECT .+ FROM changes WHERE id").
+		WithArgs(sqlmock.AnyArg()).
+		WillReturnRows(addChangeRow(sqlmock.NewRows(changeColumns),
+			testUUID, "api", nil, nil, "deployment", "v3 deploy", "scheduled", future, now))
+
+	mock.ExpectExec("INSERT INTO audit_log").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	futureStr := future.UTC().Format(time.RFC3339)
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"register_change","arguments":{"system":"api","type":"deployment","description":"v3 deploy","status":"scheduled","timestamp":"` + futureStr + `"}}}`
+	c, rec := setupMCPContext(body)
+
+	if err := h.Handle(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	resp := decodeMCPResp(t, rec.Body.Bytes())
+	if resp.Error != nil {
+		t.Fatalf("unexpected RPC error: %+v", resp.Error)
+	}
+
+	var change map[string]interface{}
+	if err := json.Unmarshal(unwrapToolResult(t, resp.Result), &change); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if change["status"] != "scheduled" {
+		t.Errorf("expected status scheduled, got %v", change["status"])
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestMCPListChanges_StatusFilter(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	h := &MCPHandler{DB: db, Hub: nil}
+
+	future := time.Now().Add(24 * time.Hour)
+	now := time.Now()
+
+	mock.ExpectQuery("SELECT COUNT").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+	mock.ExpectQuery("SELECT .+ FROM changes").
+		WillReturnRows(addChangeRow(sqlmock.NewRows(changeColumns),
+			testUUID, "api", nil, nil, "deployment", "v2 deploy", "scheduled", future, now))
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_changes","arguments":{"status":"scheduled"}}}`
+	c, rec := setupMCPContext(body)
+
+	if err := h.Handle(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	resp := decodeMCPResp(t, rec.Body.Bytes())
+	if resp.Error != nil {
+		t.Fatalf("unexpected RPC error: %+v", resp.Error)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(unwrapToolResult(t, resp.Result), &result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+
+	total, _ := result["total"].(float64)
+	if int(total) != 1 {
+		t.Errorf("expected total 1, got %v", total)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
 	}
 }

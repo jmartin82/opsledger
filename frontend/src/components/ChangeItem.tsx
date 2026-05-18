@@ -1,8 +1,10 @@
 import { Change, CHANGE_TYPE_COLORS, CHANGE_TYPE_LABELS, ChangeType } from '@/types/change';
 import { cn } from '@/lib/utils';
-import { Server, Rocket, Settings, User, Globe, Clock, Pencil, Trash2 } from 'lucide-react';
+import { Server, Rocket, Settings, User, Globe, Clock, Pencil, Trash2, CalendarClock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { formatDistanceToNow, format, parseISO } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 
 const TYPE_ICONS: Record<ChangeType, React.ComponentType<{ className?: string }>> = {
   infrastructure: Server,
@@ -14,24 +16,49 @@ interface ChangeItemProps {
   change: Change;
   onEdit?: (change: Change) => void;
   onDelete?: (change: Change) => void;
+  onConfirm?: (change: Change) => void;
 }
 
-const ChangeItem = ({ change, onEdit, onDelete }: ChangeItemProps) => {
+const ChangeItem = ({ change, onEdit, onDelete, onConfirm }: ChangeItemProps) => {
   const { can } = useAuth();
+  const { toast } = useToast();
   const Icon = TYPE_ICONS[change.type];
   const badgeClass = CHANGE_TYPE_COLORS[change.type];
   const label = CHANGE_TYPE_LABELS[change.type];
   const parsedDate = parseISO(change.timestamp);
-  const showActions = can('edit_changes') && (onEdit || onDelete);
+  const showActions = can('edit_changes') && (onEdit || onDelete || onConfirm);
+
+  const isScheduled = change.status === 'scheduled';
+  const isOverdue = isScheduled && parsedDate < new Date();
+
+  const handleConfirm = async () => {
+    try {
+      const confirmed = await api.patch<Change>(`/api/changes/${change.id}/confirm`, {});
+      toast({ title: 'Change confirmed', description: `${change.system} marked as executed` });
+      onConfirm?.(confirmed);
+    } catch {
+      toast({ title: 'Failed to confirm change', variant: 'destructive' });
+    }
+  };
 
   return (
     <div className={cn(
       'flex gap-4 p-4 rounded-lg border border-border bg-card hover:border-border/80',
-      'hover:bg-accent/30 transition-colors group animate-fade-in relative'
+      'hover:bg-accent/30 transition-colors group animate-fade-in relative',
+      isOverdue && 'border-amber-500/40 bg-amber-500/5',
     )}>
       {/* Action buttons — top-right, visible on hover */}
       {showActions && (
         <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {isScheduled && onConfirm && (
+            <button
+              onClick={handleConfirm}
+              className="p-1.5 rounded hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-500 transition-colors"
+              title="Mark as done"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            </button>
+          )}
           {onEdit && (
             <button
               onClick={() => onEdit(change)}
@@ -78,6 +105,19 @@ const ChangeItem = ({ change, onEdit, onDelete }: ChangeItemProps) => {
             {label}
           </span>
 
+          {/* Status badge — only for non-executed */}
+          {isOverdue ? (
+            <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 border border-amber-500/30 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" />
+              Overdue
+            </span>
+          ) : isScheduled ? (
+            <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20 flex items-center gap-1">
+              <CalendarClock className="w-3 h-3" />
+              Scheduled
+            </span>
+          ) : null}
+
           {/* System */}
           <span className="font-mono text-xs font-semibold text-foreground bg-secondary px-2 py-0.5 rounded">
             {change.system}
@@ -112,7 +152,9 @@ const ChangeItem = ({ change, onEdit, onDelete }: ChangeItemProps) => {
           )}
           <span className="flex items-center gap-1" title={format(parsedDate, 'PPpp')}>
             <Clock className="w-3 h-3" />
-            {formatDistanceToNow(parsedDate, { addSuffix: true })}
+            {isScheduled
+              ? `Scheduled ${formatDistanceToNow(parsedDate, { addSuffix: true })}`
+              : formatDistanceToNow(parsedDate, { addSuffix: true })}
           </span>
           <span className="font-mono text-muted-foreground/60 hidden sm:block">
             {format(parsedDate, 'yyyy-MM-dd HH:mm:ss')} UTC

@@ -29,7 +29,9 @@ export function mockChange(overrides?: Partial<import('@/types/change').Change>)
     user: 'alice.martin',
     type: 'deployment',
     description: 'Deployed v2.3.1 with bug fixes',
+    status: 'executed',
     timestamp: '2026-02-20T14:30:00Z',
+    created_at: '2026-02-20T14:30:00Z',
     ...overrides,
   };
 }

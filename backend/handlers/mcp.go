@@ -112,7 +112,7 @@ func (h *MCPHandler) handleToolsList() map[string]any {
 	tools := []Tool{
 		{
 			Name:        "register_change",
-			Description: "Report a change made to any system so it is logged in the ops ledger. Call this tool immediately after completing any action that modifies shared infrastructure, configuration, or software — including: deploying a new version of a service, applying Terraform/IaC plans, changing environment variables or secrets, modifying cloud resources (security groups, IAM policies, DNS, databases), updating Kubernetes manifests, changing CI/CD pipeline configuration, rotating API keys or certificates, or scaling resources. Use `type` to classify the change: choose `deployment` for new releases or rollbacks, `infrastructure` for cloud/IaC/Kubernetes/networking changes, and `configuration` for env vars, secrets, feature flags, or settings changes. Always call this tool proactively — do not wait to be asked.",
+			Description: "Report a change made to any system so it is logged in the ops ledger. Call this tool immediately after completing any action that modifies shared infrastructure, configuration, or software — including: deploying a new version of a service, applying Terraform/IaC plans, changing environment variables or secrets, modifying cloud resources (security groups, IAM policies, DNS, databases), updating Kubernetes manifests, changing CI/CD pipeline configuration, rotating API keys or certificates, or scaling resources. Use `type` to classify the change: choose `deployment` for new releases or rollbacks, `infrastructure` for cloud/IaC/Kubernetes/networking changes, and `configuration` for env vars, secrets, feature flags, or settings changes. Use `status=scheduled` to pre-register a planned future change. Always call this tool proactively — do not wait to be asked.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -121,9 +121,22 @@ func (h *MCPHandler) handleToolsList() map[string]any {
 					"description": map[string]any{"type": "string", "description": "Human-readable summary of exactly what changed and why. Be specific: include version numbers, resource names, key names (not values), before/after values where relevant. Examples: 'Deployed v2.4.1 (was v2.3.9) to fix memory leak in worker', 'Set MAX_CONNECTIONS=100 (was 50) to handle load increase', 'Applied terraform plan: added sg-0abc123 ingress rule for port 443'"},
 					"environment": map[string]any{"type": "string", "description": "Target environment: production, staging, development, etc. Strongly recommended — omit only when not applicable (e.g. a shared service with no environment distinction)"},
 					"user":        map[string]any{"type": "string", "description": "Identity of the agent or person who made the change. For AI agents use a descriptive name like 'claude-code', 'github-actions', or 'terraform-cloud'. For human-initiated changes, use their username."},
-					"timestamp":   map[string]any{"type": "string", "description": "RFC3339 timestamp of when the change was applied (e.g. '2025-01-15T10:30:00Z'). Defaults to now. Use an explicit timestamp if reporting a change that happened in the past."},
+					"status":      map[string]any{"type": "string", "enum": []string{"executed", "scheduled"}, "description": "Whether the change has already happened ('executed', default) or is planned for a future date ('scheduled'). Use 'scheduled' to pre-register an upcoming maintenance window or planned deployment."},
+					"timestamp":   map[string]any{"type": "string", "description": "RFC3339 timestamp. For executed changes: when the change happened (defaults to now). For scheduled changes: the planned execution date/time (required, must be in the future)."},
 				},
 				"required": []string{"system", "type", "description"},
+			},
+		},
+		{
+			Name:        "confirm_change",
+			Description: "Mark a previously scheduled change as executed. Call this after completing a planned change that was pre-registered with status=scheduled. Optionally provide the actual execution timestamp if it differs from the scheduled time.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":        map[string]any{"type": "string", "description": "UUID of the scheduled change record to confirm"},
+					"timestamp": map[string]any{"type": "string", "description": "Actual execution time in RFC3339 format. Defaults to now if not provided."},
+				},
+				"required": []string{"id"},
 			},
 		},
 		{
@@ -164,6 +177,7 @@ func (h *MCPHandler) handleToolsList() map[string]any {
 					"environment": map[string]any{"type": "string", "description": "Filter to changes in a specific environment (e.g. 'production', 'staging')"},
 					"user":        map[string]any{"type": "string", "description": "Filter to changes made by a specific user or agent"},
 					"type":        map[string]any{"type": "string", "description": "Filter by category: `deployment`, `infrastructure`, or `configuration`"},
+					"status":      map[string]any{"type": "string", "enum": []string{"executed", "scheduled", "overdue"}, "description": "Filter by status: 'executed' for completed changes, 'scheduled' for upcoming planned changes, 'overdue' for scheduled changes whose date has passed without confirmation."},
 					"search":      map[string]any{"type": "string", "description": "Full-text search across description, system name, user, and environment fields"},
 					"limit":       map[string]any{"type": "integer", "description": "Maximum number of records to return (default 50, max 200)"},
 					"offset":      map[string]any{"type": "integer", "description": "Number of records to skip for pagination (use with `limit`)"},
@@ -193,6 +207,8 @@ func (h *MCPHandler) handleToolCall(ctx context.Context, params json.RawMessage)
 		data, rpcErr = h.updateChange(ctx, callParams.Arguments)
 	case "delete_change":
 		data, rpcErr = h.deleteChange(ctx, callParams.Arguments)
+	case "confirm_change":
+		data, rpcErr = h.confirmChange(ctx, callParams.Arguments)
 	case "list_changes":
 		data, rpcErr = h.listChanges(ctx, callParams.Arguments)
 	default:
@@ -231,6 +247,14 @@ func (h *MCPHandler) createChange(ctx context.Context, args map[string]any) (int
 		return nil, &RPCError{Code: -32602, Message: "type must be infrastructure, deployment, or configuration"}
 	}
 
+	status := getStringArg(args, "status")
+	if status == "" {
+		status = "executed"
+	}
+	if status != "executed" && status != "scheduled" {
+		return nil, &RPCError{Code: -32602, Message: "status must be executed or scheduled"}
+	}
+
 	var environment *string
 	if env, ok := args["environment"].(string); ok && env != "" {
 		environment = &env
@@ -250,7 +274,16 @@ func (h *MCPHandler) createChange(ctx context.Context, args map[string]any) (int
 		ts = &parsed
 	}
 
-	change, err := models.CreateChange(h.DB, system, environment, user, typeStr, description, ts)
+	if status == "scheduled" {
+		if ts == nil {
+			return nil, &RPCError{Code: -32602, Message: "timestamp is required for scheduled changes"}
+		}
+		if !ts.After(time.Now()) {
+			return nil, &RPCError{Code: -32602, Message: "scheduled timestamp must be in the future"}
+		}
+	}
+
+	change, err := models.CreateChange(h.DB, system, environment, user, typeStr, description, status, ts)
 	if err != nil {
 		return nil, &RPCError{Code: -32000, Message: "Failed to create change: " + err.Error()}
 	}
@@ -260,6 +293,41 @@ func (h *MCPHandler) createChange(ctx context.Context, args map[string]any) (int
 
 	if h.Hub != nil {
 		h.Hub.Publish(SSEEvent{Type: "change.created", Data: change})
+	}
+	return change, nil
+}
+
+func (h *MCPHandler) confirmChange(ctx context.Context, args map[string]any) (interface{}, *RPCError) {
+	id := getStringArg(args, "id")
+	if id == "" {
+		return nil, &RPCError{Code: -32602, Message: "id is required"}
+	}
+
+	var executedAt *time.Time
+	if tsStr, ok := args["timestamp"].(string); ok && tsStr != "" {
+		parsed, err := time.Parse(time.RFC3339, tsStr)
+		if err != nil {
+			return nil, &RPCError{Code: -32602, Message: "Invalid timestamp format, use RFC3339"}
+		}
+		executedAt = &parsed
+	}
+
+	change, err := models.ConfirmChange(h.DB, id, executedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, &RPCError{Code: -32602, Message: "Change not found"}
+		}
+		if err == models.ErrAlreadyExecuted {
+			return nil, &RPCError{Code: -32602, Message: "Change is already marked as executed"}
+		}
+		return nil, &RPCError{Code: -32000, Message: "Failed to confirm change: " + err.Error()}
+	}
+
+	detail := change.System + ": " + change.Description
+	_ = models.CreateAuditEntry(h.DB, "mcp", nil, "change.confirm", "change", nil, strPtr(change.ID), &detail, nil)
+
+	if h.Hub != nil {
+		h.Hub.Publish(SSEEvent{Type: "change.updated", Data: change})
 	}
 	return change, nil
 }
@@ -302,7 +370,15 @@ func (h *MCPHandler) updateChange(ctx context.Context, args map[string]any) (int
 		ts = &parsed
 	}
 
-	change, err := models.UpdateChange(h.DB, id, system, environment, user, typeStr, description, ts)
+	status := getStringArg(args, "status")
+	if status == "" {
+		status = "executed"
+	}
+	if status != "executed" && status != "scheduled" {
+		return nil, &RPCError{Code: -32602, Message: "status must be executed or scheduled"}
+	}
+
+	change, err := models.UpdateChange(h.DB, id, system, environment, user, typeStr, description, status, ts)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, &RPCError{Code: -32602, Message: "Change not found"}
@@ -353,6 +429,7 @@ func (h *MCPHandler) listChanges(ctx context.Context, args map[string]any) (inte
 		Environment: getStringArg(args, "environment"),
 		User:        getStringArg(args, "user"),
 		Type:        getStringArg(args, "type"),
+		Status:      getStringArg(args, "status"),
 		Search:      getStringArg(args, "search"),
 	}
 
